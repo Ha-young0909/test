@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
 import { errorResponse, readJson, serverError } from "@/lib/api";
 import { getServerSupabase } from "@/lib/supabase/server";
-import { isCategory, isUuid } from "@/lib/validate";
+import { isUuid } from "@/lib/validate";
 import type { UpdateRoomResponse } from "@/types";
 
 type Ctx = { params: Promise<{ id: string }> };
 
-/** 방장이 방 상태(collecting → voting)나 카테고리를 바꾼다. */
+/** 방장이 방 상태(collecting → voting)를 바꾼다. */
 export async function PATCH(request: Request, { params }: Ctx) {
   const { id } = await params;
   const body = await readJson(request);
@@ -20,12 +20,6 @@ export async function PATCH(request: Request, { params }: Ctx) {
       return errorResponse(400, "상태가 올바르지 않습니다.", "INVALID_INPUT");
     }
     update.status = body.status;
-  }
-  if (body.category !== undefined) {
-    if (!isCategory(body.category)) {
-      return errorResponse(400, "카테고리가 올바르지 않습니다.", "INVALID_INPUT");
-    }
-    update.category = body.category;
   }
   if (Object.keys(update).length === 0) {
     return errorResponse(400, "변경할 값이 없습니다.", "INVALID_INPUT");
