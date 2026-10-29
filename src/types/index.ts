@@ -118,11 +118,14 @@ export interface JoinRoomRequest {
 }
 export interface JoinRoomResponse {
   participantId: string;
+  /** 이후 쓰기 요청에서 본인임을 증명하는 비밀 토큰. 브라우저에만 저장한다. */
+  participantToken: string;
 }
 
 /** PATCH /api/rooms/[id]/participants — 출발지 저장·변경 (B 가 사용). */
 export interface UpdateOriginRequest {
   participantId: string;
+  participantToken: string;
   lat: number;
   lng: number;
   label: string;
@@ -187,6 +190,7 @@ export interface PlacesResponse {
 /** POST /api/rooms/[id]/vote (D) */
 export interface VoteRequest {
   participantId: string;
+  participantToken: string;
   candidateId: string;
   /** true 면 투표, false 면 내 표 취소. 마감 후에는 서버가 거부한다. */
   on: boolean;

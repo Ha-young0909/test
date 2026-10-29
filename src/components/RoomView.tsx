@@ -6,7 +6,7 @@ import Map from "@/components/Map";
 import OriginSearch, { type Origin } from "@/components/OriginSearch";
 import { getBrowserSupabase } from "@/lib/supabase/client";
 import { findOriginUpdates, snapshotOrigins, type OriginSnapshot } from "@/lib/originChanges";
-import { getHostId, getParticipantId } from "@/lib/session";
+import { getHostId, getParticipantId, getParticipantToken } from "@/lib/session";
 import {
   MAX_PARTICIPANTS,
   MIN_PARTICIPANTS,
@@ -38,7 +38,7 @@ export default function RoomView({ roomId }: { roomId: string }) {
       const db = getBrowserSupabase();
       const [roomRes, partRes] = await Promise.all([
         db.from("rooms").select("id, name, category, status, vote_deadline, created_at").eq("id", roomId).maybeSingle(),
-        db.from("participants").select("*").eq("room_id", roomId).order("created_at"),
+        db.from("participants").select("id, room_id, nickname, is_host, origin_label, origin_lat, origin_lng, created_at").eq("room_id", roomId).order("created_at"),
       ]);
       if (roomRes.error) throw roomRes.error;
       if (partRes.error) throw partRes.error;
@@ -87,11 +87,12 @@ export default function RoomView({ roomId }: { roomId: string }) {
   }, [refresh]);
 
   async function saveOrigin(origin: Origin) {
-    if (!myId) throw new Error("먼저 닉네임으로 참여해 주세요.");
+    const token = getParticipantToken(roomId);
+    if (!myId || !token) throw new Error("먼저 닉네임으로 참여해 주세요.");
     const res = await fetch(`/api/rooms/${roomId}/participants`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ participantId: myId, lat: origin.lat, lng: origin.lng, label: origin.name }),
+      body: JSON.stringify({ participantId: myId, participantToken: token, lat: origin.lat, lng: origin.lng, label: origin.name }),
     });
     const data: UpdateOriginResponse | ApiError = await res.json();
     if (!res.ok || "error" in data) {

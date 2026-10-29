@@ -28,6 +28,7 @@ create table if not exists participants (
   origin_label text,
   origin_lat double precision,
   origin_lng double precision,
+  token uuid not null default gen_random_uuid(), -- 참여자 비밀 토큰. anon 에게 노출 금지
   created_at timestamptz not null default now(),
   unique (room_id, nickname)
 );
@@ -72,6 +73,8 @@ create table if not exists candidates (
   created_at timestamptz not null default now()
 );
 create index if not exists candidates_room_idx on candidates(room_id, kind);
+-- 중간 지점 재계산이 같은 역을 덮어쓸 수 있도록 방 안에서 (종류, 이름)을 유일하게 한다.
+create unique index if not exists candidates_room_kind_name_uidx on candidates(room_id, kind, name);
 -- 중간 지점을 다시 계산해도 같은 역은 같은 행(과 그 표)을 유지하도록 upsert 키로 쓴다.
 create unique index if not exists candidates_room_station_uniq on candidates(room_id, kind, name);
 
@@ -119,6 +122,20 @@ create policy "anon read votes" on votes for select to anon using (true);
 revoke all on rooms from anon, authenticated;
 grant select (id, name, category, status, vote_deadline, created_at) on rooms to anon;
 
+-- 참여자 토큰도 같은 방식으로 숨긴다. 쓰기 API 는 participantId + participantToken 으로 본인을 확인한다.
+revoke all on participants from anon, authenticated;
+grant select (id, room_id, nickname, is_host, origin_label, origin_lat, origin_lng, created_at) on participants to anon;
+
 -- 투표 실시간 반영(Supabase Realtime)을 쓰려면 아래를 켠다.
-alter publication supabase_realtime add table votes;
-alter publication supabase_realtime add table rooms;
+-- participants 는 Realtime 에 올리지 않는다: 변경 이벤트에는 컬럼 권한이 적용되지 않아 token 이 새 나갈 수 있다.
+-- 여러 번 실행해도 되도록 이미 등록된 테이블은 건너뛴다.
+do $$
+declare t text;
+begin
+  foreach t in array array['votes', 'rooms', 'candidates'] loop
+    begin
+      execute format('alter publication supabase_realtime add table %I', t);
+    exception when duplicate_object then null;
+    end;
+  end loop;
+end $$;
