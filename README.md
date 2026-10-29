@@ -2,7 +2,7 @@
 
 친구들의 출발지를 모아 **대중교통 이동 시간 기준 중간 지점(지하철역)** 과 주변 장소를 추천하고, **투표로 약속 장소를 정하는** 웹 서비스입니다. (해커톤 프로젝트)
 
-> 개발 중입니다. 현재는 빈 Next.js 기본 상태이며, 아래 내용은 목표로 하는 기능입니다.
+> 개발 중입니다. 방 만들기·닉네임 참여까지 구현되었고, 나머지는 목표로 하는 기능입니다.
 
 ## 주요 기능
 
@@ -50,7 +50,14 @@ cp .env.example .env.local
 - `.env.local`은 Git에 커밋되지 않습니다. 키 값을 코드나 커밋, 채팅에 넣지 마세요.
 - 카카오 지도를 쓰려면 카카오 디벤로퍼스 앱 설정에 사용할 도메인(예: `http://localhost:3000`)을 등록해야 합니다.
 
-### 3. 개발 서버 실행
+### 3. Supabase 준비
+
+Supabase 프로젝트를 만들고 SQL Editor에서 아래 순서로 실행합니다.
+
+1. [`supabase/schema.sql`](supabase/schema.sql): 테이블, RLS, 참여자 6명 제한 트리거
+2. [`supabase/seed.sql`](supabase/seed.sql): 참여자 3명이 채워진 "데모 방" (홈의 "데모 방 둘러보기" 링크가 가리킴)
+
+### 4. 개발 서버 실행
 
 ```bash
 npm run dev
@@ -58,12 +65,28 @@ npm run dev
 
 [http://localhost:3000](http://localhost:3000)에서 확인합니다.
 
-### 4. 빌드와 검사
+### 5. 빌드와 검사
 
 ```bash
 npm run build
 npm run lint
+npm test
 ```
+
+## 접근 제어의 한계
+
+로그인이 없으므로 접근 제어는 **"방 ID(uuid)를 아는 사람만 그 방을 쓴다"** 수준의 단순한 방식입니다.
+
+- 방 링크를 아는 사람은 누구나 참여자 목록을 읽고, 참여하고, 투표할 수 있습니다.
+- 모든 쓰기는 서버(Route Handler)가 service role 키로 처리하고, 브라우저(anon 키)는 읽기만 가능합니다.
+- 다만 anon 읽기 정책은 방 ID를 몰라도 테이블 전체를 조회할 수 있습니다. 민감한 정보(실명, 정확한 집 주소 등)를 입력하지 마세요.
+- 방장 권한 토큰(`rooms.host_id`)만은 anon에게 열지 않으며, 방을 만든 브라우저의 localStorage에 저장됩니다. 브라우저 저장소를 지우면 방장 권한을 잃습니다.
+- 참여자 ID도 localStorage에 저장되므로, 다른 기기에서 같은 방에 들어오면 새 참여자로 가입해야 합니다.
+
+## 배포 (Vercel)
+
+1. GitHub 저장소를 Vercel에 연결하고, 위 환경변수 6개를 Vercel 프로젝트 설정에 입력합니다.
+2. `master`에 병합되면 자동 배포됩니다. 카카오 디벤로퍼스에 배포 도메인을 등록하는 것을 잊지 마세요.
 
 ## 폴더 구조
 
@@ -71,6 +94,9 @@ npm run lint
 src/
   app/          페이지와 라우트 (App Router)
   components/   재사용 UI 컴포넌트
+  lib/          Supabase 클라이언트, 검증, 브라우저 저장소 헬퍼
+  types/        팀 공용 타입과 API 계약
+supabase/       schema.sql, seed.sql
 docs/           프로젝트 문서
 ```
 
