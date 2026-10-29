@@ -2,9 +2,17 @@
 
 import { useCallback, useEffect, useState } from "react";
 import JoinForm from "@/components/JoinForm";
+import Map, { type ParticipantPin } from "@/components/Map";
+import OriginSearch, { type Origin } from "@/components/OriginSearch";
 import { getBrowserSupabase } from "@/lib/supabase/client";
 import { getHostId, getParticipantId } from "@/lib/session";
-import { MAX_PARTICIPANTS, MIN_PARTICIPANTS, type Participant, type Room } from "@/types";
+import {
+  MAX_PARTICIPANTS,
+  MIN_PARTICIPANTS,
+  type ApiError,
+  type Participant,
+  type Room,
+} from "@/types";
 
 const POLL_MS = 4000;
 
@@ -19,6 +27,8 @@ export default function RoomView({ roomId }: { roomId: string }) {
   const [myId, setMyId] = useState<string | null>(null);
   const [isHost, setIsHost] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -56,6 +66,33 @@ export default function RoomView({ roomId }: { roomId: string }) {
     return () => clearInterval(timer);
   }, [refresh]);
 
+  async function saveOrigin(origin: Origin) {
+    if (!myId) return;
+    setSaving(true);
+    setSaveError(null);
+    try {
+      const res = await fetch(`/api/rooms/${roomId}/participants`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          participantId: myId,
+          lat: origin.lat,
+          lng: origin.lng,
+          label: origin.name,
+        }),
+      });
+      if (!res.ok) {
+        const data: ApiError = await res.json().catch(() => ({ error: "" }));
+        throw new Error(data.error || "출발지를 저장하지 못했습니다.");
+      }
+      await refresh();
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : "출발지를 저장하지 못했습니다.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function copyLink() {
     try {
       await navigator.clipboard.writeText(window.location.href);
@@ -80,6 +117,11 @@ export default function RoomView({ roomId }: { roomId: string }) {
   const joined = myId !== null && participants.some((p) => p.id === myId);
   const full = participants.length >= MAX_PARTICIPANTS;
   const canFind = participants.length >= MIN_PARTICIPANTS;
+  const pins: ParticipantPin[] = participants.flatMap((p) =>
+    p.origin_lat !== null && p.origin_lng !== null
+      ? [{ nickname: p.nickname, lat: p.origin_lat, lng: p.origin_lng }]
+      : [],
+  );
 
   return (
     <main className="mx-auto flex w-full max-w-xl flex-col gap-6 px-4 py-8">
@@ -117,8 +159,19 @@ export default function RoomView({ roomId }: { roomId: string }) {
 
       {room.status === "collecting" ? (
         <section className="space-y-2">
-          {/* B: 출발지 입력(OriginSearch)과 지도(Map), C: 중간 지점 찾기 버튼이 여기에 연결된다. */}
-          {joined && <p className="text-sm text-gray-500">출발지 입력은 곧 추가됩니다.</p>}
+          {joined && (
+            <>
+              <OriginSearch onSelect={saveOrigin} disabled={saving} />
+              {saving && <p className="text-sm text-gray-500">출발지 저장 중…</p>}
+              {saveError && (
+                <p role="alert" className="text-sm text-red-600">
+                  {saveError}
+                </p>
+              )}
+            </>
+          )}
+          <Map participants={pins} className="h-80 w-full" />
+          {/* C: 중간 지점 찾기 버튼이 여기에 연결된다. */}
           {isHost && (
             <button
               disabled
