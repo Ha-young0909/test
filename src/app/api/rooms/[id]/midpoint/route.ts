@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { errorResponse, readJson, serverError } from "@/lib/api";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { isUuid } from "@/lib/validate";
-import { computeMidpoint, type Origin } from "@/lib/midpoint/engine";
+import { APPROXIMATE_NAME, computeMidpoint, type Origin } from "@/lib/midpoint/engine";
 import { findSubwayStations } from "@/lib/midpoint/kakao";
 import { acquireRoom, releaseRoom } from "@/lib/midpoint/lock";
 import { MIN_PARTICIPANTS, type MidpointResponse, type MidpointStation } from "@/types";
@@ -86,33 +86,38 @@ export async function POST(request: Request, { params }: Ctx) {
       },
     });
 
-    const { error: upsertError } = await db.from("candidates").upsert(
-      result.stations.map((s, i) => ({
-        room_id: id,
-        kind: s.kind,
-        number: i + 1,
-        name: s.name,
-        address: s.address,
-        lat: s.lat,
-        lng: s.lng,
-        lines: s.lines,
-        max_minutes: s.maxMinutes,
-        avg_minutes: s.avgMinutes,
-        over90: s.over90,
-        approximate: result.approximate,
-      })),
-      { onConflict: "room_id,kind,name" },
-    );
-    if (upsertError) throw upsertError;
+    // 평균 좌표 한 곳짜리 대체 결과는 실제로 갈 수 있는 역이 아니라서 투표 대상으로 저장하지 않는다.
+    // 일시적인 검색 실패로 기존 후보와 표가 지워지는 것도 막는다.
+    const persist = !result.stations.every((s) => s.name === APPROXIMATE_NAME);
+    if (persist) {
+      const { error: upsertError } = await db.from("candidates").upsert(
+        result.stations.map((s, i) => ({
+          room_id: id,
+          kind: s.kind,
+          number: i + 1,
+          name: s.name,
+          address: s.address,
+          lat: s.lat,
+          lng: s.lng,
+          lines: s.lines,
+          max_minutes: s.maxMinutes,
+          avg_minutes: s.avgMinutes,
+          over90: s.over90,
+          approximate: result.approximate,
+        })),
+        { onConflict: "room_id,kind,name" },
+      );
+      if (upsertError) throw upsertError;
 
-    // 후보에서 빠진 역(과 그 역의 표)만 지운다.
-    const { data: stored, error: storedError } = await db.from("candidates").select("id, kind, name").eq("room_id", id);
-    if (storedError) throw storedError;
-    const keep = new Set(result.stations.map((s) => `${s.kind}|${s.name}`));
-    const staleIds = (stored ?? []).filter((c) => !keep.has(`${c.kind}|${c.name}`)).map((c) => c.id as string);
-    if (staleIds.length > 0) {
-      const { error } = await db.from("candidates").delete().in("id", staleIds);
-      if (error) throw error;
+      // 후보에서 빠진 역(과 그 역의 표)만 지운다.
+      const { data: stored, error: storedError } = await db.from("candidates").select("id, kind, name").eq("room_id", id);
+      if (storedError) throw storedError;
+      const keep = new Set(result.stations.map((s) => `${s.kind}|${s.name}`));
+      const staleIds = (stored ?? []).filter((c) => !keep.has(`${c.kind}|${c.name}`)).map((c) => c.id as string);
+      if (staleIds.length > 0) {
+        const { error } = await db.from("candidates").delete().in("id", staleIds);
+        if (error) throw error;
+      }
     }
 
     const stations: MidpointStation[] = result.stations.map((s) => ({
@@ -130,7 +135,7 @@ export async function POST(request: Request, { params }: Ctx) {
     return NextResponse.json<MidpointResponse>({
       stations,
       approximate: result.approximate,
-      topChanged: previousTop !== null && top !== null && previousTop !== top,
+      topChanged: persist && previousTop !== null && top !== null && previousTop !== top,
       previousTop,
     });
   } catch (err) {
