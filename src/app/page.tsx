@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import { connection } from "next/server";
 import { inSeason } from "@/data/seasonal";
+import RestaurantFinder from "@/components/RestaurantFinder";
 
 async function SeasonalList() {
   await connection();
@@ -21,9 +22,7 @@ async function SeasonalList() {
             <p className="mt-2 text-sm text-zinc-500">
               함께 먹으면 좋은 음식: {s.pairings.join(", ")}
             </p>
-            <button className="mt-4 rounded-lg bg-sky-600 px-3 py-2 text-sm text-white hover:bg-sky-700">
-              가까운 횟집 찾기
-            </button>
+            <RestaurantFinder />
           </li>
         ))}
       </ul>
