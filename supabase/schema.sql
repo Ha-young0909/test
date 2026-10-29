@@ -47,17 +47,17 @@ drop trigger if exists participants_max on participants;
 create trigger participants_max before insert on participants
   for each row execute function enforce_max_participants();
 
--- 후보 (중간 역 후보와 추천 장소 후보 공용)
+-- 후보 역 (지하철역·버스 정류장)
 create table if not exists candidates (
   id uuid primary key default gen_random_uuid(),
   room_id uuid not null references rooms(id) on delete cascade,
-  kind text not null check (kind in ('station', 'place')),
+  kind text not null check (kind in ('subway', 'bus')),
   number int not null,                  -- 지도 핀과 목록에 표시되는 후보 번호
   name text not null,
   address text,
   lat double precision not null,
   lng double precision not null,
-  station_name text,                    -- kind = 'place' 일 때 기준 역
+  lines text[] not null default '{}',   -- 노선·버스 번호 (예: {'2호선'}, {'472','N13'})
   max_minutes int,                      -- 가장 오래 걸리는 사람의 이동 시간
   avg_minutes int,
   over90 boolean not null default false,
@@ -75,6 +75,7 @@ create table if not exists travel_times (
   station_lat double precision not null,
   station_lng double precision not null,
   minutes int not null,
+  route text,                           -- 이용 노선·버스 (예: '2호선', '472번')
   created_at timestamptz not null default now(),
   unique (participant_id, station_name)
 );

@@ -6,6 +6,8 @@ export const NICKNAME_MAX_LENGTH = 12;
 export const GROUP_NAME_MAX_LENGTH = 20;
 
 export type RoomStatus = "collecting" | "voting";
+/** 후보 역 종류: 지하철역 또는 버스 정류장. */
+export type StationKind = "subway" | "bus";
 export type PlaceCategory = "restaurant" | "cafe" | "bar";
 
 export interface Room {
@@ -30,13 +32,13 @@ export interface Participant {
 export interface Candidate {
   id: string;
   room_id: string;
-  kind: "station" | "place";
+  kind: StationKind;
   number: number;
   name: string;
   address: string | null;
   lat: number;
   lng: number;
-  station_name: string | null;
+  lines: string[];
   max_minutes: number | null;
   avg_minutes: number | null;
   over90: boolean;
@@ -56,6 +58,7 @@ export interface TravelTime {
   station_lat: number;
   station_lng: number;
   minutes: number;
+  route: string | null;
 }
 
 // ---- API 계약 ----
@@ -118,13 +121,21 @@ export interface PlaceSearchResponse {
 export interface MidpointRequest {
   hostId: string;
 }
+export interface MidpointRoute {
+  participantId: string;
+  route: string;
+  minutes: number;
+}
 export interface MidpointStation {
   name: string;
+  kind: StationKind;
+  lines: string[];
   lat: number;
   lng: number;
   maxMinutes: number;
   avgMinutes: number;
   over90: boolean;
+  routes: MidpointRoute[];
 }
 export interface MidpointResponse {
   stations: MidpointStation[];

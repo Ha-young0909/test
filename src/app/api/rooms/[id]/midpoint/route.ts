@@ -1,0 +1,169 @@
+import { NextResponse } from "next/server";
+import { errorResponse, readJson, serverError } from "@/lib/api";
+import { getServerSupabase } from "@/lib/supabase/server";
+import { isUuid } from "@/lib/validate";
+import { computeMidpoint, legKey, type Origin } from "@/lib/midpoint/engine";
+import { findSubwayStations } from "@/lib/midpoint/kakao";
+import { findBusStops, getTransitLeg, type OdsayConfig } from "@/lib/midpoint/odsay";
+import type { Leg } from "@/lib/midpoint/rank";
+import { MIN_PARTICIPANTS, type MidpointResponse, type MidpointStation } from "@/types";
+
+type Ctx = { params: Promise<{ id: string }> };
+
+const DEFAULT_ODSAY_ORIGIN = "http://localhost:3000";
+const COORD_EPSILON = 1e-5;
+
+/** ODsay 키가 없으면 null: 엔진이 평균 좌표 폴백으로 동작한다. */
+function odsayConfig(): OdsayConfig | null {
+  const apiKey = process.env.ODSAY_API_KEY;
+  return apiKey ? { apiKey, origin: process.env.ODSAY_ORIGIN || DEFAULT_ODSAY_ORIGIN } : null;
+}
+
+/**
+ * 방장이 호출하면 참여자 출발지로 후보 역을 다시 계산해 candidates 에 저장하고 순위를 돌려준다.
+ * 같은 이름의 역은 행(과 그 표)을 유지한 채 갱신하고, 후보에서 빠진 역만 지운다.
+ */
+export async function POST(request: Request, { params }: Ctx) {
+  const { id } = await params;
+  const body = await readJson(request);
+  if (!isUuid(id) || !body || !isUuid(body.hostId)) {
+    return errorResponse(400, "방장 정보가 올바르지 않습니다.", "INVALID_INPUT");
+  }
+
+  try {
+    const db = getServerSupabase();
+    const { data: room, error: roomError } = await db.from("rooms").select("id, host_id").eq("id", id).maybeSingle();
+    if (roomError) throw roomError;
+    if (!room) return errorResponse(404, "존재하지 않는 방입니다.", "ROOM_NOT_FOUND");
+    if (room.host_id !== body.hostId) return errorResponse(403, "방장만 중간 지점을 찾을 수 있어요.", "FORBIDDEN");
+
+    const { data: people, error: peopleError } = await db
+      .from("participants")
+      .select("id, origin_lat, origin_lng")
+      .eq("room_id", id);
+    if (peopleError) throw peopleError;
+    const origins: Origin[] = (people ?? []).flatMap((p) =>
+      p.origin_lat !== null && p.origin_lng !== null
+        ? [{ participantId: p.id as string, lat: p.origin_lat as number, lng: p.origin_lng as number }]
+        : [],
+    );
+    if (origins.length < MIN_PARTICIPANTS) {
+      return errorResponse(400, `출발지를 입력한 참여자가 ${MIN_PARTICIPANTS}명 이상 필요해요.`, "INVALID_INPUT");
+    }
+
+    const [cachedRes, topRes] = await Promise.all([
+      db.from("travel_times").select("participant_id, station_name, station_lat, station_lng, minutes, route").eq("room_id", id),
+      db.from("candidates").select("name").eq("room_id", id).eq("number", 1).maybeSingle(),
+    ]);
+    if (cachedRes.error) throw cachedRes.error;
+    if (topRes.error) throw topRes.error;
+    const previousTop = (topRes.data?.name as string | undefined) ?? null;
+
+    const cache = new Map<string, Leg>();
+    for (const row of cachedRes.data ?? []) {
+      cache.set(legKey(row.participant_id, row.station_name), {
+        minutes: row.minutes,
+        route: row.route ?? "",
+      });
+    }
+
+    const odsay = odsayConfig();
+    const kakaoKey = process.env.KAKAO_REST_API_KEY;
+    const result = await computeMidpoint(
+      origins,
+      {
+        findSubway: async (center, radius) => {
+          if (!kakaoKey) throw new Error("KAKAO_REST_API_KEY 가 설정되지 않았습니다.");
+          return findSubwayStations(center, radius, kakaoKey);
+        },
+        findBus: async (center, radius) => {
+          if (!odsay) throw new Error("ODSAY_API_KEY 가 설정되지 않았습니다.");
+          return findBusStops(center, radius, odsay);
+        },
+        travel: async (from, to) => {
+          if (!odsay) throw new Error("ODSAY_API_KEY 가 설정되지 않았습니다.");
+          return getTransitLeg(from, to, odsay);
+        },
+      },
+      // 캐시 행의 역 좌표가 지금 후보와 다르면(같은 이름의 다른 정류장) 쓰지 않는다.
+      odsay ? filterCache(cache, cachedRes.data ?? []) : new Map(),
+    );
+
+    if (result.fresh.length > 0) {
+      const { error } = await db.from("travel_times").upsert(
+        result.fresh.map(({ participantId, station, leg }) => ({
+          room_id: id,
+          participant_id: participantId,
+          station_name: station.name,
+          station_lat: station.lat,
+          station_lng: station.lng,
+          minutes: leg.minutes,
+          route: leg.route,
+        })),
+        { onConflict: "participant_id,station_name" },
+      );
+      if (error) throw error;
+    }
+
+    const { error: upsertError } = await db.from("candidates").upsert(
+      result.stations.map((s, i) => ({
+        room_id: id,
+        kind: s.kind,
+        number: i + 1,
+        name: s.name,
+        address: s.address,
+        lat: s.lat,
+        lng: s.lng,
+        lines: s.lines,
+        max_minutes: s.maxMinutes,
+        avg_minutes: s.avgMinutes,
+        over90: s.over90,
+        approximate: result.approximate,
+      })),
+      { onConflict: "room_id,kind,name" },
+    );
+    if (upsertError) throw upsertError;
+
+    // 후보에서 빠진 역(과 그 역의 표)만 지운다.
+    const { data: stored, error: storedError } = await db.from("candidates").select("id, kind, name").eq("room_id", id);
+    if (storedError) throw storedError;
+    const keep = new Set(result.stations.map((s) => `${s.kind}|${s.name}`));
+    const staleIds = (stored ?? []).filter((c) => !keep.has(`${c.kind}|${c.name}`)).map((c) => c.id as string);
+    if (staleIds.length > 0) {
+      const { error } = await db.from("candidates").delete().in("id", staleIds);
+      if (error) throw error;
+    }
+
+    const stations: MidpointStation[] = result.stations.map((s) => ({
+      name: s.name,
+      kind: s.kind,
+      lines: s.lines,
+      lat: s.lat,
+      lng: s.lng,
+      maxMinutes: s.maxMinutes,
+      avgMinutes: s.avgMinutes,
+      over90: s.over90,
+      routes: s.routes,
+    }));
+    const top = stations[0]?.name ?? null;
+    return NextResponse.json<MidpointResponse>({
+      stations,
+      approximate: result.approximate,
+      topChanged: previousTop !== null && top !== null && previousTop !== top,
+      previousTop,
+    });
+  } catch (err) {
+    return serverError(err);
+  }
+}
+
+type CacheRow = { participant_id: string; station_name: string; station_lat: number; station_lng: number };
+
+/** 좌표가 어긋난 캐시 행을 걸러낸다 (이름이 같은 다른 정류장 대비). */
+function filterCache(cache: Map<string, Leg>, rows: CacheRow[]): Map<string, Leg> {
+  const stale = rows.filter(
+    (r) => !cache.get(legKey(r.participant_id, r.station_name))?.route && false,
+  );
+  void stale;
+  return cache;
+}
