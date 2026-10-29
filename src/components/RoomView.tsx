@@ -1,10 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import JoinForm from "@/components/JoinForm";
 import Map from "@/components/Map";
 import OriginSearch, { type Origin } from "@/components/OriginSearch";
 import { getBrowserSupabase } from "@/lib/supabase/client";
+import { findOriginUpdates, snapshotOrigins, type OriginSnapshot } from "@/lib/originChanges";
 import { getHostId, getParticipantId } from "@/lib/session";
 import {
   MAX_PARTICIPANTS,
@@ -28,6 +29,9 @@ export default function RoomView({ roomId }: { roomId: string }) {
   const [myId, setMyId] = useState<string | null>(null);
   const [isHost, setIsHost] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+  const prevOrigins = useRef<OriginSnapshot | null>(null);
+  const myIdRef = useRef<string | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -42,7 +46,14 @@ export default function RoomView({ roomId }: { roomId: string }) {
         setLoad({ state: "notFound" });
         return;
       }
-      setLoad({ state: "ready", room: roomRes.data as Room, participants: partRes.data as Participant[] });
+      const list = partRes.data as Participant[];
+      if (prevOrigins.current) {
+        const names = findOriginUpdates(prevOrigins.current, list, myIdRef.current);
+        // 1순위 변경 안내("1순위가 △△으로 바뀌었어요")는 C의 중간 지점 결과가 연결되면 덧붙인다.
+        if (names.length > 0) setNotice(`${names.join(", ")}님이 등록했어요`);
+      }
+      prevOrigins.current = snapshotOrigins(list);
+      setLoad({ state: "ready", room: roomRes.data as Room, participants: list });
     } catch (err) {
       setLoad((prev) =>
         prev.state === "ready"
@@ -51,6 +62,16 @@ export default function RoomView({ roomId }: { roomId: string }) {
       );
     }
   }, [roomId]);
+
+  useEffect(() => {
+    myIdRef.current = myId;
+  }, [myId]);
+
+  useEffect(() => {
+    if (!notice) return;
+    const timer = setTimeout(() => setNotice(null), 4000);
+    return () => clearTimeout(timer);
+  }, [notice]);
 
   // localStorage 는 브라우저에서만 읽을 수 있어 마운트 후에 반영한다.
   useEffect(() => {
@@ -131,24 +152,11 @@ export default function RoomView({ roomId }: { roomId: string }) {
         </button>
       </header>
 
-      <section aria-label="참여자" className="space-y-2">
-        <h2 className="font-semibold">
-          참여자 {participants.length}/{MAX_PARTICIPANTS}
-        </h2>
-        <ul className="space-y-1">
-          {participants.map((p) => (
-            <li key={p.id} className="flex items-center gap-2 rounded-lg bg-gray-100 px-3 py-2 dark:bg-gray-800">
-              <span>{p.nickname}</span>
-              {p.is_host && <Badge>방장</Badge>}
-              {p.id === myId && <Badge>나</Badge>}
-              <span className="ml-auto truncate text-sm text-gray-500">
-                {p.origin_label ?? "출발지 미입력"}
-              </span>
-            </li>
-          ))}
-          {participants.length === 0 && <li className="text-sm text-gray-500">아직 아무도 없어요.</li>}
-        </ul>
-      </section>
+      {notice && (
+        <p role="status" className="rounded-lg bg-blue-50 px-3 py-2 text-sm text-blue-800 dark:bg-blue-950 dark:text-blue-200">
+          {notice}
+        </p>
+      )}
 
       {!joined && !full && <JoinForm roomId={roomId} onJoined={setMyId} />}
       {!joined && full && <p className="text-sm text-red-600">방이 가득 찼어요. (최대 {MAX_PARTICIPANTS}명)</p>}
@@ -157,6 +165,24 @@ export default function RoomView({ roomId }: { roomId: string }) {
         <section className="space-y-5">
           {joined && <OriginSearch onSubmit={saveOrigin} registeredLabel={me?.origin_label} />}
           {mapSection}
+          <section aria-label="참여자" className="space-y-2">
+            <h2 className="font-semibold">
+              참여자 {participants.length}/{MAX_PARTICIPANTS}
+            </h2>
+            <ul className="space-y-1">
+              {participants.map((p) => (
+                <li key={p.id} className="flex items-center gap-2 rounded-lg bg-gray-100 px-3 py-2 dark:bg-gray-800">
+                  <span>{p.nickname}</span>
+                  {p.is_host && <Badge>방장</Badge>}
+                  {p.id === myId && <Badge>나</Badge>}
+                  <span className="ml-auto truncate text-sm text-gray-500">
+                    {p.origin_label ?? "출발지 미입력"}
+                  </span>
+                </li>
+              ))}
+              {participants.length === 0 && <li className="text-sm text-gray-500">아직 아무도 없어요.</li>}
+            </ul>
+          </section>
           {/* C: 중간 지점 찾기 버튼이 여기에 연결된다. */}
           {isHost && (
             <button
@@ -171,6 +197,24 @@ export default function RoomView({ roomId }: { roomId: string }) {
       ) : (
         <section className="space-y-5">
           {mapSection}
+          <section aria-label="참여자" className="space-y-2">
+            <h2 className="font-semibold">
+              참여자 {participants.length}/{MAX_PARTICIPANTS}
+            </h2>
+            <ul className="space-y-1">
+              {participants.map((p) => (
+                <li key={p.id} className="flex items-center gap-2 rounded-lg bg-gray-100 px-3 py-2 dark:bg-gray-800">
+                  <span>{p.nickname}</span>
+                  {p.is_host && <Badge>방장</Badge>}
+                  {p.id === myId && <Badge>나</Badge>}
+                  <span className="ml-auto truncate text-sm text-gray-500">
+                    {p.origin_label ?? "출발지 미입력"}
+                  </span>
+                </li>
+              ))}
+              {participants.length === 0 && <li className="text-sm text-gray-500">아직 아무도 없어요.</li>}
+            </ul>
+          </section>
           {/* D: 후보 목록·투표·결과(VotePanel, ResultView)가 여기에 연결된다. */}
           <p className="text-sm text-gray-500">투표 화면은 곧 추가됩니다.</p>
         </section>
