@@ -19,7 +19,6 @@
 - Next.js (App Router), React, TypeScript, Tailwind CSS
 - Supabase (데이터 저장, 실시간 반영)
 - 카카오 로컬 API, 카카오 지도 JavaScript SDK
-- ODsay 대중교통 API
 - 배포: Vercel
 
 ## 시작하기
@@ -45,7 +44,6 @@ cp .env.example .env.local
 | `NEXT_PUBLIC_SUPABASE_URL` | Supabase 주소 | 브라우저 공개 |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase 공개용 키 | 브라우저 공개 |
 | `SUPABASE_SERVICE_ROLE_KEY` | 서버에서 캐시 저장 | 서버 전용 |
-| `ODSAY_API_KEY` | 대중교통 이동 시간 | 서버 전용 |
 
 - `.env.local`은 Git에 커밋되지 않습니다. 키 값을 코드나 커밋, 채팅에 넣지 마세요.
 - 카카오 지도를 쓰려면 카카오 디벤로퍼스 앱 설정에 사용할 도메인(예: `http://localhost:3000`)을 등록해야 합니다.
