@@ -30,6 +30,30 @@ export interface Participant {
   created_at: string;
 }
 
+/** 역 근처 맛집·갈만한 곳 한 항목 (candidates.restaurants / spots 의 원소). */
+export interface NearbyPlace {
+  name: string;
+  /** 종류 (예: 한식, 카페, 공원). */
+  category: string;
+  /** 별점. 출처가 정해지기 전이나 정보가 없으면 null. */
+  rating: number | null;
+  walkMinutes: number;
+}
+
+/** 역 근처 맛집. 카카오 로컬 API는 별점이 없어 출처가 정해질 때까지 rating 은 null 일 수 있다. */
+export interface DiningPlace {
+  name: string;
+  category: string;
+  rating: number | null;
+  walkMinutes: number;
+}
+/** 역 근처 갈만한 곳(카페·공원·쇼핑·전시 등). */
+export interface NearbyPlace {
+  name: string;
+  category: string;
+  walkMinutes: number;
+}
+
 export interface Candidate {
   id: string;
   room_id: string;
@@ -40,10 +64,14 @@ export interface Candidate {
   lat: number;
   lng: number;
   lines: string[];
+  dining: DiningPlace[];
+  nearby: NearbyPlace[];
   max_minutes: number | null;
   avg_minutes: number | null;
   over90: boolean;
   approximate: boolean;
+  restaurants: NearbyPlace[];
+  spots: NearbyPlace[];
 }
 
 export interface Vote {
@@ -148,10 +176,9 @@ export interface MidpointResponse {
 }
 
 /** POST /api/rooms/[id]/places (D) */
+/** 방의 모든 후보 역에 맛집·갈만한 곳을 한 번에 채운다. */
 export interface PlacesRequest {
   hostId: string;
-  category: PlaceCategory;
-  stationName: string;
 }
 export interface PlacesResponse {
   candidates: Candidate[];

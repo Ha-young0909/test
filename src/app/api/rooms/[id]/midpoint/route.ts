@@ -10,6 +10,9 @@ import { MIN_PARTICIPANTS, type MidpointResponse, type MidpointStation } from "@
 
 type Ctx = { params: Promise<{ id: string }> };
 
+// 후보 8곳 × 참여자 6명의 첫 조회는 수 초가 걸릴 수 있다.
+export const maxDuration = 30;
+
 const DEFAULT_ODSAY_ORIGIN = "http://localhost:3000";
 
 /** ODsay 키가 없으면 null: 엔진이 평균 좌표 폴백으로 동작한다. */

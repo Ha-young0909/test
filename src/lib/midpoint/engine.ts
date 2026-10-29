@@ -6,7 +6,7 @@ export const APPROXIMATE_NAME = "대략적인 중간 지점";
 const SEARCH_RADII_M = [1500, 3000, 6000];
 const MAX_CANDIDATES = 8;
 const MAX_SUBWAY = 5;
-const CONCURRENCY = 6;
+const CONCURRENCY = 3; // ODsay 는 동시 호출이 많으면 429 를 돌려준다
 const CACHE_MATCH_M = 50;
 
 export interface Origin extends LatLng {

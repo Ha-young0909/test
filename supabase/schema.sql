@@ -63,6 +63,12 @@ create table if not exists candidates (
   avg_minutes int,
   over90 boolean not null default false,
   approximate boolean not null default false, -- 평균 좌표 폴백 여부
+  dining jsonb not null default '[]',   -- 근처 맛집 2곳 [{ name, category, rating, walkMinutes }]
+  nearby jsonb not null default '[]',   -- 역 근처 갈만한 곳 2곳 [{ name, category, walkMinutes }]
+  -- 근처 맛집 2곳·갈만한 곳 2곳 (D). 항목: { name, category, rating, walkMinutes }
+  -- 중간 지점 재계산은 이 컬럼을 건드리지 않는다.
+  restaurants jsonb not null default '[]',
+  spots jsonb not null default '[]',
   created_at timestamptz not null default now()
 );
 create index if not exists candidates_room_idx on candidates(room_id, kind);
