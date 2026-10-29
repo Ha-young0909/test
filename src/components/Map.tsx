@@ -8,6 +8,8 @@ export interface MapPoint {
 }
 export interface ParticipantPin extends MapPoint {
   nickname: string;
+  /** 내 핀은 강조색으로 그린다. */
+  isMe?: boolean;
 }
 export interface StationPin extends MapPoint {
   name: string;
@@ -87,21 +89,29 @@ function loadKakaoSdk(): Promise<KakaoMaps> {
   return sdkPromise;
 }
 
-// 닉네임 등 사용자 입력이 들어가므로 textContent로만 채운다.
-function pin(kind: "participant" | "station" | "candidate" | "top", label: string, text?: string): HTMLElement {
+// 닉네임 등 사용자 입력이 들어가므로 textContent로만 채운다. 모양은 디자인 시안을 따른다.
+type PinKind = "participant" | "me" | "station" | "candidate" | "top";
+const PIN_COLORS: Record<PinKind, string> = {
+  participant: "#17201B",
+  me: "#E8553D",
+  station: "#17201B",
+  candidate: "#17201B",
+  top: "#E8553D",
+};
+
+function pin(kind: PinKind, label: string, text?: string): HTMLElement {
   const wrap = document.createElement("div");
-  wrap.style.cssText = "display:flex;flex-direction:column;align-items:center;pointer-events:none;";
+  wrap.style.cssText = "display:flex;flex-direction:column;align-items:center;gap:3px;pointer-events:none;";
 
   const dot = document.createElement("div");
-  const colors = { participant: "#2563eb", station: "#dc2626", candidate: "#16a34a", top: "#dc2626" };
-  dot.style.cssText = `min-width:26px;height:26px;padding:0 6px;border-radius:13px;background:${colors[kind]};color:#fff;font:700 13px/26px sans-serif;text-align:center;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.4);white-space:nowrap;`;
+  dot.style.cssText = `width:34px;height:34px;border-radius:17px;background:${PIN_COLORS[kind]};color:#fff;font:700 14px/34px 'Noto Sans KR',sans-serif;text-align:center;border:2px solid #fff;box-sizing:border-box;box-shadow:0 1px 4px rgba(0,0,0,.4);`;
   dot.textContent = label;
   wrap.appendChild(dot);
 
   if (text) {
     const tag = document.createElement("div");
     tag.style.cssText =
-      "margin-top:2px;padding:1px 6px;border-radius:4px;background:rgba(255,255,255,.95);color:#111;font:12px/1.4 sans-serif;box-shadow:0 1px 3px rgba(0,0,0,.3);white-space:nowrap;max-width:140px;overflow:hidden;text-overflow:ellipsis;";
+      "padding:0 8px;height:20px;border-radius:10px;background:#fff;color:#17201B;font:700 12px/20px 'Noto Sans KR',sans-serif;box-shadow:0 1px 3px rgba(0,0,0,.3);white-space:nowrap;max-width:120px;overflow:hidden;text-overflow:ellipsis;";
     tag.textContent = text;
     wrap.appendChild(tag);
   }
@@ -156,7 +166,7 @@ export default function Map({ participants = [], station = null, candidates = []
       count += 1;
     };
 
-    participants.forEach((p) => add(p, pin("participant", p.nickname.slice(0, 1) || "?", p.nickname), 1));
+    participants.forEach((p) => add(p, pin(p.isMe ? "me" : "participant", Array.from(p.nickname)[0] ?? "?", p.nickname), 1));
     candidates.forEach((c) => add(c, pin(c.number === 1 ? "top" : "candidate", String(c.number), c.name), c.number === 1 ? 3 : 2));
     if (station) add(station, pin("station", "역", station.name), 3);
 
@@ -183,7 +193,7 @@ export default function Map({ participants = [], station = null, candidates = []
   return (
     <div
       ref={containerRef}
-      className={`rounded-lg bg-gray-100 ${className ?? "h-80 w-full"}`}
+      className={`overflow-hidden rounded-[18px] border-[1.5px] border-[#17201B] bg-[#E9ECE4] ${className ?? "h-80 w-full"}`}
       aria-label="약속 장소 지도"
     />
   );

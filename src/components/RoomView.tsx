@@ -28,7 +28,6 @@ export default function RoomView({ roomId }: { roomId: string }) {
   const [myId, setMyId] = useState<string | null>(null);
   const [isHost, setIsHost] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [originError, setOriginError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -67,27 +66,17 @@ export default function RoomView({ roomId }: { roomId: string }) {
   }, [refresh]);
 
   async function saveOrigin(origin: Origin) {
-    if (!myId) return;
-    setOriginError(null);
-    try {
-      const res = await fetch(`/api/rooms/${roomId}/participants`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          participantId: myId,
-          lat: origin.lat,
-          lng: origin.lng,
-          label: origin.name,
-        }),
-      });
-      const data: UpdateOriginResponse | ApiError = await res.json();
-      if (!res.ok || "error" in data) {
-        throw new Error("error" in data ? data.error : "출발지를 저장하지 못했습니다.");
-      }
-      await refresh();
-    } catch (err) {
-      setOriginError(err instanceof Error ? err.message : "출발지를 저장하지 못했습니다.");
+    if (!myId) throw new Error("먼저 닉네임으로 참여해 주세요.");
+    const res = await fetch(`/api/rooms/${roomId}/participants`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ participantId: myId, lat: origin.lat, lng: origin.lng, label: origin.name }),
+    });
+    const data: UpdateOriginResponse | ApiError = await res.json();
+    if (!res.ok || "error" in data) {
+      throw new Error("error" in data ? data.error : "출발지를 저장하지 못했습니다.");
     }
+    await refresh();
   }
 
   async function copyLink() {
@@ -113,8 +102,18 @@ export default function RoomView({ roomId }: { roomId: string }) {
   const { room, participants } = load;
   const pins = participants.flatMap((p) =>
     p.origin_lat !== null && p.origin_lng !== null
-      ? [{ nickname: p.nickname, lat: p.origin_lat, lng: p.origin_lng }]
+      ? [{ nickname: p.nickname, lat: p.origin_lat, lng: p.origin_lng, isMe: p.id === myId }]
       : [],
+  );
+  const me = participants.find((p) => p.id === myId);
+  const mapSection = (
+    <section aria-label="친구들의 출발지" className="space-y-2.5">
+      <div className="flex items-baseline justify-between">
+        <h2 className="text-sm font-bold">친구들의 출발지</h2>
+        <span className="text-[13px] text-gray-500">{pins.length}명 입력 완료</span>
+      </div>
+      <Map participants={pins} />
+    </section>
   );
   const joined = myId !== null && participants.some((p) => p.id === myId);
   const full = participants.length >= MAX_PARTICIPANTS;
@@ -154,20 +153,10 @@ export default function RoomView({ roomId }: { roomId: string }) {
       {!joined && !full && <JoinForm roomId={roomId} onJoined={setMyId} />}
       {!joined && full && <p className="text-sm text-red-600">방이 가득 찼어요. (최대 {MAX_PARTICIPANTS}명)</p>}
 
-      <Map participants={pins} />
-
       {room.status === "collecting" ? (
-        <section className="space-y-2">
-          {joined && (
-            <>
-              <OriginSearch onSelect={saveOrigin} />
-              {originError && (
-                <p role="alert" className="text-sm text-red-600">
-                  {originError}
-                </p>
-              )}
-            </>
-          )}
+        <section className="space-y-5">
+          {joined && <OriginSearch onSubmit={saveOrigin} registeredLabel={me?.origin_label} />}
+          {mapSection}
           {/* C: 중간 지점 찾기 버튼이 여기에 연결된다. */}
           {isHost && (
             <button
@@ -180,7 +169,8 @@ export default function RoomView({ roomId }: { roomId: string }) {
           )}
         </section>
       ) : (
-        <section>
+        <section className="space-y-5">
+          {mapSection}
           {/* D: 후보 목록·투표·결과(VotePanel, ResultView)가 여기에 연결된다. */}
           <p className="text-sm text-gray-500">투표 화면은 곧 추가됩니다.</p>
         </section>
