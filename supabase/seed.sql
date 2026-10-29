@@ -27,8 +27,7 @@ insert into candidates (id, room_id, kind, number, name, address, lat, lng, line
     '[{"name":"커먼그라운드","category":"쇼핑","walkMinutes":3},{"name":"건대 카페거리","category":"카페","walkMinutes":5}]'),
   ('00000000-0000-4000-8000-000000000022', '00000000-0000-4000-8000-000000000001', 'subway', 2, '선릉역', '서울 강남구 테헤란로 340', 37.5045, 127.0490, '{2호선,분당선}', 54, 34, false, false,
     '[{"name":"선릉 초밥","category":"일식","rating":4.4,"walkMinutes":5},{"name":"테헤란 파스타","category":"양식","rating":4.2,"walkMinutes":3}]',
-    '[{"name":"선정릉","category":"공원","walkMinutes":6},{"name":"봉은사","category":"전시","walkMinutes":12}]'),
-  ('00000000-0000-4000-8000-000000000023', '00000000-0000-4000-8000-000000000001', 'bus', 3, '강변역 버스정류장', '서울 광진구 구천면로', 37.5352, 127.0945, '{2412,3216}', 47, 40, false, false, '[]', '[]');
+    '[{"name":"선정릉","category":"공원","walkMinutes":6},{"name":"봉은사","category":"전시","walkMinutes":12}]');
 
 insert into travel_times (room_id, participant_id, station_name, station_lat, station_lng, minutes, route) values
   ('00000000-0000-4000-8000-000000000001', '00000000-0000-4000-8000-000000000011', '건대입구역', 37.5404, 127.0693, 33, '2호선'),
