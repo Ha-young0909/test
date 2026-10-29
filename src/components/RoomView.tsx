@@ -5,31 +5,40 @@ import JoinForm from "@/components/JoinForm";
 import Map from "@/components/Map";
 import OriginSearch, { type Origin } from "@/components/OriginSearch";
 import { getBrowserSupabase } from "@/lib/supabase/client";
+import { describeTopChange, requestMidpoint } from "@/lib/midpointClient";
 import { findOriginUpdates, snapshotOrigins, type OriginSnapshot } from "@/lib/originChanges";
 import { getHostId, getParticipantId, getParticipantToken } from "@/lib/session";
 import {
   MAX_PARTICIPANTS,
   MIN_PARTICIPANTS,
   type ApiError,
-  type Candidate,
   type Participant,
+  type StationKind,
   type Room,
   type UpdateOriginResponse,
 } from "@/types";
 
 const POLL_MS = 4000;
 
+/** 방 화면에 필요한 후보 역 요약 (candidates 테이블 일부 컬럼). */
+interface CandidateRow {
+  id: string;
+  number: number;
+  kind: StationKind;
+  name: string;
+  lat: number;
+  lng: number;
+  lines: string[];
+  avg_minutes: number | null;
+  over90: boolean;
+  approximate: boolean;
+}
+
 type Load =
   | { state: "loading" }
   | { state: "notFound" }
   | { state: "error"; message: string }
   | { state: "ready"; room: Room; participants: Participant[]; candidates: CandidateRow[] };
-
-type CandidateRow = Pick<
-  Candidate,
-  "id" | "kind" | "number" | "name" | "lat" | "lng" | "lines" | "avg_minutes" | "over90" | "approximate"
->;
-const CANDIDATE_COLUMNS = "id, kind, number, name, lat, lng, lines, avg_minutes, over90, approximate";
 
 export default function RoomView({ roomId }: { roomId: string }) {
   const [load, setLoad] = useState<Load>({ state: "loading" });
@@ -39,9 +48,8 @@ export default function RoomView({ roomId }: { roomId: string }) {
   const [notice, setNotice] = useState<string | null>(null);
   const prevOrigins = useRef<OriginSnapshot | null>(null);
   const myIdRef = useRef<string | null>(null);
-  const prevTop = useRef<string | null | undefined>(undefined);
+  const prevTop = useRef<string | null>(null);
   const [finding, setFinding] = useState(false);
-  const [findError, setFindError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -49,7 +57,11 @@ export default function RoomView({ roomId }: { roomId: string }) {
       const [roomRes, partRes, candRes] = await Promise.all([
         db.from("rooms").select("id, name, status, vote_deadline, created_at").eq("id", roomId).maybeSingle(),
         db.from("participants").select("id, room_id, nickname, is_host, origin_label, origin_lat, origin_lng, created_at").eq("room_id", roomId).order("created_at"),
-        db.from("candidates").select(CANDIDATE_COLUMNS).eq("room_id", roomId).order("number"),
+        db
+          .from("candidates")
+          .select("id, number, kind, name, lat, lng, lines, avg_minutes, over90, approximate")
+          .eq("room_id", roomId)
+          .order("number"),
       ]);
       if (roomRes.error) throw roomRes.error;
       if (partRes.error) throw partRes.error;
@@ -61,17 +73,14 @@ export default function RoomView({ roomId }: { roomId: string }) {
       const list = partRes.data as Participant[];
       const candidates = (candRes.data ?? []) as CandidateRow[];
       const top = candidates[0]?.name ?? null;
-      const messages: string[] = [];
+      const topChange = describeTopChange(prevTop.current, top);
+      prevTop.current = top;
       if (prevOrigins.current) {
         const names = findOriginUpdates(prevOrigins.current, list, myIdRef.current);
-        if (names.length > 0) messages.push(`${names.join(", ")}님이 등록했어요`);
+        const parts = [names.length > 0 ? `${names.join(", ")}님이 등록했어요` : null, topChange].filter(Boolean);
+        if (parts.length > 0) setNotice(parts.join(" · "));
       }
-      if (prevTop.current !== undefined && prevTop.current !== null && top !== null && prevTop.current !== top) {
-        messages.push(`1순위가 ${top}으로 바뀌었어요`);
-      }
-      if (messages.length > 0) setNotice(messages.join(" · "));
       prevOrigins.current = snapshotOrigins(list);
-      prevTop.current = top;
       setLoad({ state: "ready", room: roomRes.data as Room, participants: list, candidates });
     } catch (err) {
       setLoad((prev) =>
@@ -99,14 +108,14 @@ export default function RoomView({ roomId }: { roomId: string }) {
   }, [roomId]);
 
   // 표 변경·참여자 입장이 보이도록 주기적으로 재조회한다 (Realtime 은 D 가 투표에 붙인다).
-  // 백그라운드 탭에서는 조회를 멈췄다가 다시 보이면 바로 갱신한다.
   useEffect(() => {
     refresh();
+    // 백그라운드 탭에서는 재조회를 멈추고, 다시 보이면 바로 한 번 조회한다.
     const timer = setInterval(() => {
-      if (!document.hidden) refresh();
+      if (document.visibilityState === "visible") refresh();
     }, POLL_MS);
     const onVisible = () => {
-      if (!document.hidden) refresh();
+      if (document.visibilityState === "visible") refresh();
     };
     document.addEventListener("visibilitychange", onVisible);
     return () => {
@@ -114,34 +123,6 @@ export default function RoomView({ roomId }: { roomId: string }) {
       document.removeEventListener("visibilitychange", onVisible);
     };
   }, [refresh]);
-
-  // 후보 역을 다시 계산한다. 방장은 hostId 로, 참여자는 토큰으로 호출한다.
-  async function findMidpoint(silent: boolean) {
-    const token = getParticipantToken(roomId);
-    const hostId = getHostId(roomId);
-    const credentials = hostId ? { hostId } : myId && token ? { participantId: myId, participantToken: token } : null;
-    if (!credentials) return;
-    setFinding(true);
-    if (!silent) setFindError(null);
-    try {
-      const res = await fetch(`/api/rooms/${roomId}/midpoint`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(credentials),
-      });
-      if (!res.ok) {
-        const data: ApiError = await res.json().catch(() => ({ error: "" }));
-        // 다른 사람이 계산 중(429)이면 그 결과가 곧 재조회로 들어온다.
-        if (res.status === 429) return;
-        throw new Error(data.error || "중간 지점을 찾지 못했습니다.");
-      }
-      await refresh();
-    } catch (err) {
-      if (!silent) setFindError(err instanceof Error ? err.message : "중간 지점을 찾지 못했습니다.");
-    } finally {
-      setFinding(false);
-    }
-  }
 
   async function saveOrigin(origin: Origin) {
     const token = getParticipantToken(roomId);
@@ -156,8 +137,25 @@ export default function RoomView({ roomId }: { roomId: string }) {
       throw new Error("error" in data ? data.error : "출발지를 저장하지 못했습니다.");
     }
     await refresh();
-    // 출발지가 바뀌면 순위를 다시 계산한다. 실패해도 출발지 저장은 이미 끝났다.
-    void findMidpoint(true);
+    // 내가 등록했으니 내가 다시 계산한다. 다른 사람 화면은 재조회로 결과를 받는다.
+    void findMidpoint({ quiet: true });
+  }
+
+  async function findMidpoint({ quiet = false }: { quiet?: boolean } = {}) {
+    const hostId = getHostId(roomId);
+    const token = getParticipantToken(roomId);
+    const creds = hostId ? { hostId } : myId && token ? { participantId: myId, participantToken: token } : null;
+    if (!creds) return;
+    setFinding(true);
+    try {
+      await requestMidpoint(roomId, creds);
+      await refresh();
+    } catch (err) {
+      // 출발지가 아직 2명 미만일 때 같은 정상 상황은 조용히 넘긴다.
+      if (!quiet) setNotice(err instanceof Error ? err.message : "중간 지점을 찾지 못했습니다.");
+    } finally {
+      setFinding(false);
+    }
   }
 
   async function copyLink() {
@@ -187,14 +185,13 @@ export default function RoomView({ roomId }: { roomId: string }) {
       : [],
   );
   const me = participants.find((p) => p.id === myId);
-  const candidatePins = candidates.map((c) => ({ number: c.number, name: c.name, lat: c.lat, lng: c.lng }));
   const mapSection = (
     <section aria-label="친구들의 출발지" className="space-y-2.5">
       <div className="flex items-baseline justify-between">
         <h2 className="text-sm font-bold">친구들의 출발지</h2>
         <span className="text-[13px] text-gray-500">{pins.length}명 입력 완료</span>
       </div>
-      <Map participants={pins} candidates={candidatePins} />
+      <Map participants={pins} candidates={candidates} />
     </section>
   );
   const joined = myId !== null && participants.some((p) => p.id === myId);
@@ -227,46 +224,28 @@ export default function RoomView({ roomId }: { roomId: string }) {
           {joined && <OriginSearch onSubmit={saveOrigin} registeredLabel={me?.origin_label} />}
           {mapSection}
           <ParticipantList participants={participants} myId={myId} />
-          <CandidateList candidates={candidates} />
+          {candidates.length > 0 && <CandidateList candidates={candidates} />}
           {isHost && (
             <button
-              onClick={() => findMidpoint(false)}
+              onClick={() => findMidpoint()}
               disabled={!canFind || finding}
               title={canFind ? undefined : `출발지를 입력한 참여자가 ${MIN_PARTICIPANTS}명 이상 필요해요`}
-              className="w-full rounded-xl bg-blue-600 px-4 py-3 font-semibold text-white disabled:bg-gray-300 disabled:text-gray-600"
+              className="w-full rounded-xl bg-[#17201B] px-4 py-3 font-semibold text-white disabled:bg-gray-300 disabled:text-gray-600"
             >
-              {finding ? "찾는 중…" : candidates.length > 0 ? "중간 지점 다시 찾기" : "중간 지점 찾기"}
-              {!canFind && ` (출발지 ${MIN_PARTICIPANTS}명 이상 필요)`}
+              {finding ? "찾는 중..." : `중간 지점 ${candidates.length > 0 ? "다시 " : ""}찾기`}
+              {canFind ? "" : ` (${MIN_PARTICIPANTS}명 이상 필요)`}
             </button>
-          )}
-          {findError && (
-            <p role="alert" className="text-sm text-red-600">
-              {findError}
-            </p>
           )}
         </section>
       ) : (
         <section className="space-y-5">
           {mapSection}
           <ParticipantList participants={participants} myId={myId} />
-          <CandidateList candidates={candidates} />
           {/* D: 후보 목록·투표·결과(VotePanel, ResultView)가 여기에 연결된다. */}
           <p className="text-sm text-gray-500">투표 화면은 곧 추가됩니다.</p>
         </section>
       )}
     </main>
-  );
-}
-
-function Shell({ children }: { children: React.ReactNode }) {
-  return <main className="flex min-h-screen items-center justify-center px-6 text-center">{children}</main>;
-}
-
-function Badge({ children }: { children: React.ReactNode }) {
-  return (
-    <span className="rounded bg-blue-100 px-1.5 py-0.5 text-xs font-medium text-blue-700 dark:bg-blue-900 dark:text-blue-200">
-      {children}
-    </span>
   );
 }
 
@@ -291,30 +270,51 @@ function ParticipantList({ participants, myId }: { participants: Participant[]; 
   );
 }
 
-// 후보 역 순위 미리보기. 노선별 내 이동 시간과 투표는 D 의 VotePanel 이 맡는다.
 function CandidateList({ candidates }: { candidates: CandidateRow[] }) {
-  if (candidates.length === 0) return null;
-  const approximate = candidates.some((c) => c.approximate);
   return (
-    <section aria-label="후보 역 순위" className="space-y-2">
-      <h2 className="font-semibold">중간 지점 후보</h2>
-      {approximate && <p className="text-sm text-amber-700">대략적인 중간 지점이에요. 실제 이동 시간과 다를 수 있어요.</p>}
-      {candidates.some((c) => c.over90) && (
-        <p className="text-sm text-amber-700">이동 시간이 90분을 넘는 친구가 있어요.</p>
+    <section aria-label="후보 역" className="space-y-2">
+      <h2 className="text-sm font-bold">후보 역 순위</h2>
+      {candidates[0]?.approximate && (
+        <p className="text-[13px] text-[#B8381F]">대략적인 중간 지점이에요. 실제 이동 시간과 다를 수 있어요.</p>
       )}
-      <ol className="space-y-1">
+      <ol className="space-y-1.5">
         {candidates.map((c) => (
-          <li key={c.id} className="flex items-center gap-2 rounded-lg bg-gray-100 px-3 py-2 dark:bg-gray-800">
-            <span className={`w-6 text-center font-bold ${c.number === 1 ? "text-red-600" : ""}`}>{c.number}</span>
-            <span>{c.name}</span>
-            <Badge>{c.kind === "subway" ? "지하철" : "버스"}</Badge>
-            <span className="ml-auto truncate text-sm text-gray-500">
-              {c.lines.join("·")}
-              {c.avg_minutes !== null && ` · 평균 ${c.avg_minutes}분`}
+          <li
+            key={c.id}
+            className="flex items-center gap-3 rounded-xl border border-[#17201B] bg-white px-3 py-2 text-[#17201B]"
+          >
+            <span
+              className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-sm font-bold text-white ${
+                c.number === 1 ? "bg-[#E8553D]" : "bg-[#17201B]"
+              }`}
+            >
+              {c.number}
             </span>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-bold">
+                {c.name} <span className="text-xs font-normal text-gray-500">{c.kind === "bus" ? "버스" : "지하철"}</span>
+              </p>
+              {c.lines.length > 0 && <p className="truncate text-xs text-gray-500">{c.lines.join(" · ")}</p>}
+            </div>
+            <div className="text-right text-xs">
+              {c.avg_minutes !== null && <p>평균 {c.avg_minutes}분</p>}
+              {c.over90 && <p className="text-[#B8381F]">90분 초과자 있음</p>}
+            </div>
           </li>
         ))}
       </ol>
     </section>
+  );
+}
+
+function Shell({ children }: { children: React.ReactNode }) {
+  return <main className="flex min-h-screen items-center justify-center px-6 text-center">{children}</main>;
+}
+
+function Badge({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="rounded bg-blue-100 px-1.5 py-0.5 text-xs font-medium text-blue-700 dark:bg-blue-900 dark:text-blue-200">
+      {children}
+    </span>
   );
 }
