@@ -1,34 +1,60 @@
-# Project Guidelines & Rules
+# 제철 수산물 시세 조회 서비스
 
-## 📌 프로젝트 개요
-- **프로젝트명**: [프로젝트 이름]
-- **설명**: [프로젝트 목적 및 주요 기능 간단 작성]
+제철 횟감, 가까운 횟집, 함께 먹으면 좋은 음식을 추천하는 웹 서비스.
+스택: Next.js (App Router) · React · TypeScript · Tailwind CSS · Supabase · 카카오 로컬 API
 
-## 🛠️ 개발 환경 및 스택
-- **Language**: Kotlin / C++ (필요한 언어로 변경)
-- **JDK / Compiler**: OpenJDK 17 / GCC 11+
-- **Build Tool**: Gradle / CMake
+## 협업 규칙 (Collaboration Rules)
 
-## 📁 주요 폴더 구조
-- `src/`: 소스 코드 디렉토리
-- `docs/`: 프로젝트 관련 문서 및 설계 자료
-- `tests/`: 단체 및 기능 테스트 코드
+팀원과 AI 서비스가 함께 준수한다.
 
-## 📝 코드 작성 및 커밋 컨벤션
-### 커밋 메시지 규칙
-- `feat:` 새로운 기능 추가
-- `fix:` 버그 수정
-- `docs:` 문서 수정 (`CLAUDE.md`, `README.md` 등)
-- `refactor:` 기능 변경 없는 코드 구조 개선
-- `test:` 테스트 코드 추가 및 수정
+### 1. 깃 브랜치 전략
 
-### 코딩 스타일
-- 변수/함수명: `camelCase`
-- 클래스/인터페이스명: `PascalCase`
-- 상수명: `UPPER_SNAKE_CASE`
-- 들여쓰기: 공백 4칸(4 spaces)
+- `master` (또는 `main`): 언제나 배포 가능한 최종 안정 버전
+- `develop`: 기능 개발이 통합되는 메인 개발 브랜치
+- `feature/기능명`: 세부 기능 개발 (예: `feature/login`, `feature/restaurant-search`)
+- `fix/버그명`: 버그 수정 전용 (예: `fix/supabase-auth-error`)
 
-## 🚀 주요 실행 및 빌드 명령어
-- **빌드**: `./gradlew build`
-- **실행**: `./gradlew run`
-- **테스트**: `./gradlew test`
+작업 흐름: `master` → `feature/기능명` 생성 → 작업 완료 후 Pull Request(PR) 생성 → 팀원 검토 후 `master` 병합
+
+### 2. 커밋 메시지 컨벤션
+
+제목은 `유형: 한 줄 요약` 형태로 작성한다.
+
+| 유형 | 설명 | 예시 |
+| --- | --- | --- |
+| feat | 새로운 기능 추가 | feat: Supabase 로그인 연동 기능 추가 |
+| fix | 버그 수정 | fix: 시세 목록 갱신 오류 수정 |
+| docs | 문서 수정 (CLAUDE.md, README.md 등) | docs: 협업 규칙 및 환경변수 안내 문서화 |
+| style | 코드 포맷팅 등 (동작 변경 없음) | style: Tailwind CSS 클래스 정렬 |
+| refactor | 코드 구조 개선 (기능 변경 없음) | refactor: 횟집 검색 컴포넌트 로직 분리 |
+| test | 테스트 코드 작성 및 수정 | test: 횟집 검색 API 단위 테스트 추가 |
+
+### 3. AI 모델 및 도구 활용 규칙
+
+- 역할 분담
+  - Opus: 대규모 아키텍처 설계, 복잡한 DB 스키마 기획, 프로젝트 초기 뼈대 잡기
+  - Sonnet: 세부 기능 구현, UI 컴포넌트 작성, 버그 수정 및 코드 리뷰
+- 디자인 워크플로우: Figma 대신 프롬프트 입력창의 `/design` 커맨드를 우선 활용해 UI/UX를 생성한다.
+- AI 생성 코드 검증: AI가 작성한 코드는 반드시 로컬에서 빌드(`npm run build`) 및 동작(`npm run dev`) 확인 후 커밋한다.
+
+### 4. 코드 스타일 및 PR 규칙
+
+- 컴포넌트 구조 (App Router): 페이지는 `src/app/`, 재사용 UI 컴포넌트는 `src/components/`에 둔다.
+- 명명 규칙
+  - 변수·함수: camelCase (예: `fetchSeafoodData`)
+  - 컴포넌트·타입·인터페이스: PascalCase (예: `RestaurantFinder`, `Restaurant`)
+- PR 조건
+  - 최소 1명 이상의 팀원 승인 후 `master`에 병합한다.
+  - PR 본문에 변경 기능의 스크린샷 또는 작업 요약을 포함한다.
+
+### 5. 보안 및 환경변수 수칙
+
+- 비밀 키 보호: Supabase URL, API Key, DB 비밀번호, 카카오 REST 키 등 모든 민감 정보는 `.env.local`에만 저장한다.
+- `.env.local`이 Git에 추적·커밋되지 않도록 `.gitignore` 포함 여부를 항상 확인한다.
+- 공유 환경변수: 새 환경변수를 추가하면 키 이름만 적은 `.env.example`을 갱신해 저장소에 공유한다.
+
+## 프로젝트 메모
+
+- 이 Next.js 버전은 코드 작성 전 `node_modules/next/dist/docs/`의 해당 가이드를 확인한다 (`AGENTS.md` 참고).
+- 현재 날짜 등 요청 시점 데이터를 쓰는 서버 컴포넌트는 `<Suspense>`로 감싸고 `connection()`을 호출한다.
+- DB 스키마: `supabase/schema.sql`
