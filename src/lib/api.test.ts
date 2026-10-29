@@ -23,6 +23,8 @@ describe("errorResponse / serverError", () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     const res = serverError(new Error("boom"));
     expect(res.status).toBe(500);
-    expect((await res.json()).error).toBe("boom");
+    const { error } = await res.json();
+    expect(error).not.toContain("boom"); // 내부 오류 문구는 클라이언트에 보내지 않는다
+    expect(error).toBeTruthy();
   });
 });
