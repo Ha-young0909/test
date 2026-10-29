@@ -275,7 +275,7 @@ function CandidateList({ candidates }: { candidates: CandidateRow[] }) {
     <section aria-label="후보 역" className="space-y-2">
       <h2 className="text-sm font-bold">후보 역 순위</h2>
       {candidates[0]?.approximate && (
-        <p className="text-[13px] text-[#B8381F]">대략적인 중간 지점이에요. 실제 이동 시간과 다를 수 있어요.</p>
+        <p className="text-[13px] text-[#B8381F]">직선거리로 추정한 대략적인 이동 시간이에요. 실제 대중교통 시간과 다를 수 있어요.</p>
       )}
       <ol className="space-y-1.5">
         {candidates.map((c) => (

@@ -22,7 +22,12 @@ export function distanceM(a: LatLng, b: LatLng): number {
   return 2 * R * Math.asin(Math.sqrt(h));
 }
 
-/** 직선거리로 추정한 대중교통 시간(분): 우회율 1.4, 시속 24km, 대기·환승 10분. */
+/** 도보 시간(분). 시속 약 4km. */
+export function walkMinutes(meters: number): number {
+  return Math.max(1, Math.ceil(meters / 67));
+}
+
+/** 직선거리로 추정한 대략적인 대중교통 시간(분): 우회율 1.4, 시속 24km, 대기·환승 10분. */
 export function estimateTransitMinutes(meters: number): number {
   return Math.round((meters * 1.4) / 400 + 10);
 }

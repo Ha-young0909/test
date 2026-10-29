@@ -2,6 +2,7 @@ import { centroid, distanceM, estimateTransitMinutes, type LatLng } from "./geo"
 import { rankStations, summarize, type Leg, type StationResult, type StationSeed } from "./rank";
 
 export const APPROXIMATE_NAME = "대략적인 중간 지점";
+export const ESTIMATE_ROUTE = "직선거리 추정";
 
 const SEARCH_RADII_M = [1500, 3000, 6000];
 const MAX_CANDIDATES = 8;
@@ -11,37 +12,33 @@ export interface Origin extends LatLng {
 }
 
 export interface EngineDeps {
-  /** 중심 좌표 반경 안의 지하철역, 가까운 순. */
   findSubway(center: LatLng, radiusM: number): Promise<StationSeed[]>;
-}
-
-export interface ComputedLeg {
-  participantId: string;
-  station: StationSeed;
-  leg: Leg;
 }
 
 export interface EngineResult {
   stations: StationResult[];
-  /** 후보 역을 하나도 못 찾아 평균 좌표 한 곳으로 대체했는지. */
-  approximate: boolean;
-  /** 참여자 × 후보 역 이동 시간. 호출자가 travel_times 에 저장한다. */
-  legs: ComputedLeg[];
+  /** 이동 시간은 항상 직선거리 추정이므로 true. 클라이언트가 "대략적인" 안내를 띄우는 데 쓴다. */
+  approximate: true;
 }
 
-/** 출발지에서 역까지 직선거리로 추정한 이동 시간과 설명. */
-export function straightLineLeg(from: LatLng, to: LatLng): Leg {
-  const meters = distanceM(from, to);
-  return { minutes: estimateTransitMinutes(meters), route: `직선 ${(meters / 1000).toFixed(1)}km` };
+/** 출발지에서 후보까지의 이동 시간을 직선거리로 추정한다. */
+export function estimateLeg(from: LatLng, to: LatLng): Leg {
+  return { minutes: estimateTransitMinutes(distanceM(from, to)), route: ESTIMATE_ROUTE };
 }
 
+/** 평균 좌표에서 가까운 순으로 오는 지하철역 중 최대 8곳. */
+export function pickSeeds(subway: StationSeed[]): StationSeed[] {
+  return subway.slice(0, MAX_CANDIDATES);
+}
+
+/** 반경을 넓혀 가며 후보 역을 찾는다. 검색이 실패하면 빈 목록. */
 async function searchSeeds(center: LatLng, deps: EngineDeps): Promise<StationSeed[]> {
   for (const radius of SEARCH_RADII_M) {
     try {
-      const seeds = (await deps.findSubway(center, radius)).slice(0, MAX_CANDIDATES);
+      const seeds = pickSeeds(await deps.findSubway(center, radius));
       if (seeds.length > 0) return seeds;
     } catch (err) {
-      console.error("지하철역 검색 실패", err);
+      console.error("지하철역 검색 실패, 평균 좌표로 대체합니다.", err);
       return [];
     }
   }
@@ -49,26 +46,16 @@ async function searchSeeds(center: LatLng, deps: EngineDeps): Promise<StationSee
 }
 
 /**
- * 중간 지점 계산. 참여자 평균 좌표 주변 지하철역을 찾고(없으면 반경 확대), 후보마다 모든 참여자의
- * 직선거리 기반 이동 시간을 구해 순위를 매긴다. 후보를 못 찾으면 평균 좌표 한 곳(approximate)으로 대체한다.
+ * 중간 지점 계산. 참여자 평균 좌표 주변 지하철역을 찾고, 후보마다 모든 참여자의 이동 시간을
+ * 직선거리로 추정해 순위를 매긴다. 후보를 못 찾으면 평균 좌표 한 곳을 돌려준다.
  */
 export async function computeMidpoint(origins: Origin[], deps: EngineDeps): Promise<EngineResult> {
   const center = centroid(origins);
-  const found = await searchSeeds(center, deps);
-  const approximate = found.length === 0;
-  const seeds: StationSeed[] = approximate
-    ? [{ kind: "subway", name: APPROXIMATE_NAME, address: null, ...center, lines: [] }]
-    : found;
-
-  const legs: ComputedLeg[] = [];
-  const stations = seeds.map((seed) => {
-    const byPerson = new Map<string, Leg>();
-    for (const origin of origins) {
-      const leg = straightLineLeg(origin, seed);
-      byPerson.set(origin.participantId, leg);
-      legs.push({ participantId: origin.participantId, station: seed, leg });
-    }
-    return summarize(seed, byPerson);
-  });
-  return { stations: rankStations(stations), approximate, legs: approximate ? [] : legs };
+  const seeds = await searchSeeds(center, deps);
+  const candidates: StationSeed[] =
+    seeds.length > 0 ? seeds : [{ kind: "subway", name: APPROXIMATE_NAME, address: null, ...center, lines: [] }];
+  const stations = candidates.map((seed) =>
+    summarize(seed, new Map(origins.map((o) => [o.participantId, estimateLeg(o, seed)]))),
+  );
+  return { stations: rankStations(stations), approximate: true };
 }

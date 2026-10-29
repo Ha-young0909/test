@@ -74,6 +74,8 @@ create table if not exists candidates (
 create index if not exists candidates_room_idx on candidates(room_id, kind);
 -- 중간 지점 재계산이 같은 역을 덮어쓸 수 있도록 방 안에서 (종류, 이름)을 유일하게 한다.
 create unique index if not exists candidates_room_kind_name_uidx on candidates(room_id, kind, name);
+-- 중간 지점을 다시 계산해도 같은 역은 같은 행(과 그 표)을 유지하도록 upsert 키로 쓴다.
+create unique index if not exists candidates_room_station_uniq on candidates(room_id, kind, name);
 
 -- 이동 시간 캐시 (참여자 × 후보역). 출발지가 바뀌면 서버가 해당 참여자 행을 지운다.
 create table if not exists travel_times (
