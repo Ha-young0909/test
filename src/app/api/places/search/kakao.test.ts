@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { mergeResults, toPlaceResult } from "./kakao";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { mergeResults, searchKakao, toPlaceResult } from "./kakao";
 
 describe("toPlaceResult", () => {
   it("x=경도, y=위도로 변환하고 도로명 주소를 우선한다", () => {
@@ -37,5 +37,37 @@ describe("mergeResults", () => {
   it("중복을 제거하고 개수를 제한한다", () => {
     expect(mergeResults([[a, b], [a]], 8)).toEqual([a, b]);
     expect(mergeResults([[a, b]], 1)).toEqual([a]);
+  });
+});
+
+describe("searchKakao", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("종류별 엔드포인트와 인코딩된 검색어로 호출한다", async () => {
+    const spy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(Response.json({ documents: [{ place_name: "A", x: "127", y: "37" }] }));
+    const r = await searchKakao("keyword", "홍대 입구", "k");
+    expect(r).toEqual([{ name: "A", address: "", lat: 37, lng: 127 }]);
+    expect(String(spy.mock.calls[0][0])).toBe(
+      `https://dapi.kakao.com/v2/local/search/keyword.json?query=${encodeURIComponent("홍대 입구")}&size=8`,
+    );
+  });
+
+  it("documents가 없으면 빈 배열, HTTP 오류면 예외", async () => {
+    const spy = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(Response.json({}));
+    expect(await searchKakao("address", "x", "k")).toEqual([]);
+    spy.mockResolvedValueOnce(new Response("", { status: 401 }));
+    await expect(searchKakao("address", "x", "k")).rejects.toThrow("401");
+  });
+});
+
+// 실제 카카오 API 스모크 테스트: 키가 있을 때만 실행한다 (.env.local을 불러온 뒤 KAKAO_LIVE=1 npx vitest run kakao).
+describe.skipIf(!process.env.KAKAO_LIVE || !process.env.KAKAO_REST_API_KEY)("카카오 실서버", () => {
+  it("'강남역' 검색이 서울 좌표를 돌려준다", async () => {
+    const r = await searchKakao("keyword", "강남역", process.env.KAKAO_REST_API_KEY!);
+    expect(r.length).toBeGreaterThan(0);
+    expect(r[0].lat).toBeGreaterThan(37);
+    expect(r[0].lat).toBeLessThan(38);
   });
 });
