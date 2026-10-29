@@ -8,13 +8,11 @@ const P2 = "00000000-0000-4000-8000-0000000000b2";
 const tables = {
   room: vi.fn(),
   participants: vi.fn(),
-  travelTimes: vi.fn(),
   top: vi.fn(),
   stored: vi.fn(),
   caller: vi.fn(),
 };
 const upsertCandidates = vi.fn();
-const upsertTimes = vi.fn();
 const deleteIn = vi.fn();
 
 vi.mock("@/lib/supabase/server", () => ({
@@ -29,7 +27,6 @@ vi.mock("@/lib/supabase/server", () => ({
               : { eq: tables.participants },
         };
       }
-      if (table === "travel_times") return { select: () => ({ eq: tables.travelTimes }), upsert: upsertTimes };
       return {
         select: (cols: string) =>
           cols === "name"
@@ -52,7 +49,7 @@ const req = (body: unknown) => new Request("http://test", { method: "POST", body
 
 beforeEach(() => {
   resetLocks();
-  for (const fn of [...Object.values(tables), upsertCandidates, upsertTimes, deleteIn]) fn.mockReset();
+  for (const fn of [...Object.values(tables), upsertCandidates, deleteIn]) fn.mockReset();
   tables.room.mockResolvedValue({ data: { id: ROOM, host_id: HOST }, error: null });
   tables.participants.mockResolvedValue({
     data: [
@@ -62,14 +59,11 @@ beforeEach(() => {
     error: null,
   });
   tables.caller.mockResolvedValue({ data: { token: TOKEN }, error: null });
-  tables.travelTimes.mockResolvedValue({ data: [], error: null });
   tables.top.mockResolvedValue({ data: { name: "이전역" }, error: null });
   tables.stored.mockResolvedValue({ data: [{ id: "old", kind: "subway", name: "이전역" }], error: null });
   upsertCandidates.mockResolvedValue({ error: null });
-  upsertTimes.mockResolvedValue({ error: null });
   deleteIn.mockResolvedValue({ error: null });
   vi.stubEnv("KAKAO_REST_API_KEY", "");
-  vi.stubEnv("ODSAY_API_KEY", "");
   vi.spyOn(console, "error").mockImplementation(() => {});
 });
 
@@ -103,7 +97,6 @@ describe("POST /api/rooms/[id]/midpoint", () => {
     expect(body.stations[0]).toMatchObject({ name: "대략적인 중간 지점", lat: 37.5, lng: 127 });
     expect(body.previousTop).toBe("이전역");
     expect(body.topChanged).toBe(true);
-    expect(upsertTimes).not.toHaveBeenCalled(); // 추정값은 캐시하지 않는다
     expect(upsertCandidates).toHaveBeenCalledWith(
       [expect.objectContaining({ room_id: ROOM, number: 1, approximate: true, kind: "subway" })],
       { onConflict: "room_id,kind,name" },
@@ -142,7 +135,7 @@ describe("POST /api/rooms/[id]/midpoint", () => {
   });
 
   it("실패해도 잠금이 풀린다", async () => {
-    tables.travelTimes.mockRejectedValueOnce(new Error("db down"));
+    tables.top.mockRejectedValueOnce(new Error("db down"));
     const failed = await POST(req({ hostId: HOST }), ctx());
     expect(failed.status).toBe(500);
     expect((await failed.json()).error).not.toContain("db down");

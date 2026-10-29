@@ -1,5 +1,5 @@
 // 방별 동시 실행 방지와 쿨다운. 서버리스 인스턴스마다 따로 동작하는 최선 노력 장치다.
-// ODsay 호출 한도를 아끼고, 같은 방의 계산이 겹쳐 후보 저장이 엉키는 일을 줄인다.
+// 카카오 호출을 아끼고, 같은 방의 계산이 겹쳐 후보 저장이 엉키는 일을 줄인다.
 export const COOLDOWN_MS = 2000;
 
 const rooms = new Map<string, { running: boolean; finishedAt: number }>();
