@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isCategory, isUuid, isValidCoord, normalizeNickname } from "./validate";
+import { isCategory, isUuid, isValidCoord, normalizeGroupName, normalizeNickname } from "./validate";
 
 describe("normalizeNickname", () => {
   it("공백을 제거한다", () => expect(normalizeNickname("  민수 ")).toBe("민수"));
@@ -36,4 +36,14 @@ describe("isValidCoord", () => {
     expect(isValidCoord("37", "126")).toBe(false);
     expect(isValidCoord(NaN, 126)).toBe(false);
   });
+});
+
+describe("normalizeGroupName", () => {
+  it("공백을 제거한다", () => expect(normalizeGroupName("  금요일 모임 ")).toBe("금요일 모임"));
+  it("빈 값·20자 초과·문자열 아님은 거부한다", () => {
+    expect(normalizeGroupName("  ")).toBeNull();
+    expect(normalizeGroupName("a".repeat(21))).toBeNull();
+    expect(normalizeGroupName(1)).toBeNull();
+  });
+  it("20자는 허용한다", () => expect(normalizeGroupName("a".repeat(20))).toBe("a".repeat(20)));
 });

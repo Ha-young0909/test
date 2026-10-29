@@ -24,7 +24,7 @@ export default function RoomView({ roomId }: { roomId: string }) {
     try {
       const db = getBrowserSupabase();
       const [roomRes, partRes] = await Promise.all([
-        db.from("rooms").select("id, category, status, created_at").eq("id", roomId).maybeSingle(),
+        db.from("rooms").select("id, name, category, status, created_at").eq("id", roomId).maybeSingle(),
         db.from("participants").select("*").eq("room_id", roomId).order("created_at"),
       ]);
       if (roomRes.error) throw roomRes.error;
@@ -84,7 +84,7 @@ export default function RoomView({ roomId }: { roomId: string }) {
   return (
     <main className="mx-auto flex w-full max-w-xl flex-col gap-6 px-4 py-8">
       <header className="flex items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold">{room.status === "collecting" ? "약속 방" : "투표"}</h1>
+        <h1 className="text-2xl font-bold">{room.name ?? (room.status === "collecting" ? "약속 방" : "투표")}</h1>
         <button
           onClick={copyLink}
           className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm hover:bg-gray-100 dark:border-gray-600 dark:hover:bg-gray-800"

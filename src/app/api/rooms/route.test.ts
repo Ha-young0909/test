@@ -22,13 +22,27 @@ describe("POST /api/rooms", () => {
     const res = await POST(req({}));
     expect(res.status).toBe(201);
     expect(await res.json()).toEqual({ roomId: "room-1", hostId: "host-1" });
-    expect(insert).toHaveBeenCalledWith({ category: null });
+    expect(insert).toHaveBeenCalledWith({ name: null, category: null });
   });
 
   it("카테고리를 함께 저장한다", async () => {
     single.mockResolvedValue({ data: { id: "r", host_id: "h" }, error: null });
     await POST(req({ category: "cafe" }));
-    expect(insert).toHaveBeenCalledWith({ category: "cafe" });
+    expect(insert).toHaveBeenCalledWith({ name: null, category: "cafe" });
+  });
+
+  it("모임 이름을 다듬어 저장한다", async () => {
+    single.mockResolvedValue({ data: { id: "r", host_id: "h" }, error: null });
+    await POST(req({ name: "  금요일 저녁 모임 " }));
+    expect(insert).toHaveBeenCalledWith({ name: "금요일 저녁 모임", category: null });
+  });
+
+  it("빈 이름·20자 초과 이름은 400", async () => {
+    for (const name of ["   ", "가".repeat(21)]) {
+      const res = await POST(req({ name }));
+      expect(res.status).toBe(400);
+    }
+    expect(insert).not.toHaveBeenCalled();
   });
 
   it("잘못된 카테고리는 400", async () => {

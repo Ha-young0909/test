@@ -1,5 +1,5 @@
 import Link from "next/link";
-import CreateRoomButton from "@/components/CreateRoomButton";
+import CreateRoomForm from "@/components/CreateRoomForm";
 
 // supabase/seed.sql 의 데모 방 ID 와 같아야 한다.
 const DEMO_ROOM_ID = "00000000-0000-4000-8000-000000000001";
@@ -15,7 +15,7 @@ export default function Home() {
           투표로 약속 장소를 정해요.
         </p>
       </div>
-      <CreateRoomButton />
+      <CreateRoomForm />
       <Link
         href={`/room/${DEMO_ROOM_ID}`}
         className="text-sm text-gray-500 underline underline-offset-4 hover:text-gray-800 dark:hover:text-gray-200"

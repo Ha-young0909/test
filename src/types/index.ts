@@ -3,12 +3,14 @@
 export const MIN_PARTICIPANTS = 2;
 export const MAX_PARTICIPANTS = 6;
 export const NICKNAME_MAX_LENGTH = 12;
+export const GROUP_NAME_MAX_LENGTH = 20;
 
 export type RoomStatus = "collecting" | "voting";
 export type PlaceCategory = "restaurant" | "cafe" | "bar";
 
 export interface Room {
   id: string;
+  name: string | null;
   category: PlaceCategory | null;
   status: RoomStatus;
   created_at: string;
@@ -66,6 +68,7 @@ export interface ApiError {
 
 /** POST /api/rooms */
 export interface CreateRoomRequest {
+  name?: string;
   category?: PlaceCategory;
 }
 export interface CreateRoomResponse {

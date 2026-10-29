@@ -1,4 +1,4 @@
-import { NICKNAME_MAX_LENGTH, type PlaceCategory } from "@/types";
+import { GROUP_NAME_MAX_LENGTH, NICKNAME_MAX_LENGTH, type PlaceCategory } from "@/types";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const CATEGORIES: PlaceCategory[] = ["restaurant", "cafe", "bar"];
@@ -31,4 +31,12 @@ export function isValidCoord(lat: unknown, lng: unknown): boolean {
     lng >= 124 &&
     lng <= 132
   );
+}
+
+/** 앞뒤 공백을 제거한 모임 이름을 돌려주고, 규칙에 맞지 않으면 null. */
+export function normalizeGroupName(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const name = value.trim();
+  if (name.length < 1 || name.length > GROUP_NAME_MAX_LENGTH) return null;
+  return name;
 }

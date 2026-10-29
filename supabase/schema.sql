@@ -12,6 +12,7 @@ create extension if not exists pgcrypto;
 create table if not exists rooms (
   id uuid primary key default gen_random_uuid(),
   host_id uuid not null default gen_random_uuid(), -- 방장 토큰. anon 에게 노출 금지
+  name text check (char_length(name) between 1 and 20), -- 방장이 정하는 모임 이름
   category text check (category in ('restaurant', 'cafe', 'bar')),
   status text not null default 'collecting' check (status in ('collecting', 'voting')),
   created_at timestamptz not null default now()
@@ -105,7 +106,7 @@ create policy "anon read votes" on votes for select to anon using (true);
 
 -- 방장 토큰 컬럼은 anon 이 읽지 못하게 컬럼 단위로 권한을 준다.
 revoke all on rooms from anon, authenticated;
-grant select (id, category, status, created_at) on rooms to anon;
+grant select (id, name, category, status, created_at) on rooms to anon;
 
 -- 투표 실시간 반영(Supabase Realtime)을 쓰려면 아래를 켠다.
 alter publication supabase_realtime add table votes;
