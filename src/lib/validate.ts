@@ -1,14 +1,9 @@
-import { GROUP_NAME_MAX_LENGTH, NICKNAME_MAX_LENGTH, type PlaceCategory } from "@/types";
+import { GROUP_NAME_MAX_LENGTH, NICKNAME_MAX_LENGTH } from "@/types";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const CATEGORIES: PlaceCategory[] = ["restaurant", "cafe", "bar"];
 
 export function isUuid(value: unknown): value is string {
   return typeof value === "string" && UUID_RE.test(value);
-}
-
-export function isCategory(value: unknown): value is PlaceCategory {
-  return typeof value === "string" && (CATEGORIES as string[]).includes(value);
 }
 
 /** 앞뒤 공백을 제거한 닉네임을 돌려주고, 규칙에 맞지 않으면 null. */

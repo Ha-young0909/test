@@ -13,7 +13,6 @@ create table if not exists rooms (
   id uuid primary key default gen_random_uuid(),
   host_id uuid not null default gen_random_uuid(), -- 방장 토큰. anon 에게 노출 금지
   name text check (char_length(name) between 1 and 20), -- 방장이 정하는 모임 이름
-  category text check (category in ('restaurant', 'cafe', 'bar')),
   status text not null default 'collecting' check (status in ('collecting', 'voting', 'closed')),
   vote_deadline timestamptz,           -- 투표 마감 시각. 마감 여부는 서버가 이 값으로 판단
   created_at timestamptz not null default now()
@@ -118,7 +117,7 @@ create policy "anon read votes" on votes for select to anon using (true);
 
 -- 방장 토큰 컬럼은 anon 이 읽지 못하게 컬럼 단위로 권한을 준다.
 revoke all on rooms from anon, authenticated;
-grant select (id, name, category, status, vote_deadline, created_at) on rooms to anon;
+grant select (id, name, status, vote_deadline, created_at) on rooms to anon;
 
 -- 참여자 토큰도 같은 방식으로 숨긴다. 쓰기 API 는 participantId + participantToken 으로 본인을 확인한다.
 revoke all on participants from anon, authenticated;
