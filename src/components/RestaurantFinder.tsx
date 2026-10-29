@@ -53,18 +53,18 @@ export default function RestaurantFinder() {
       <button
         onClick={search}
         disabled={state.status === "loading"}
-        className="rounded-lg bg-sky-600 px-3 py-2 text-sm text-white hover:bg-sky-700 disabled:opacity-60"
+        className="w-full rounded-full bg-brand px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-brand-strong disabled:opacity-60 dark:text-background"
       >
         {state.status === "loading" ? "찾는 중…" : "가까운 횟집 찾기"}
       </button>
 
       {state.status === "error" && (
-        <p className="mt-3 text-sm text-red-600">{state.message}</p>
+        <p className="mt-3 text-sm text-red-600 dark:text-red-400">{state.message}</p>
       )}
 
       {state.status === "done" &&
         (state.restaurants.length === 0 ? (
-          <p className="mt-3 text-sm text-zinc-500">반경 5km 내 횟집이 없어요.</p>
+          <p className="mt-3 text-sm text-muted">반경 5km 내 횟집이 없어요.</p>
         ) : (
           <ul className="mt-3 space-y-2">
             {state.restaurants.map((r) => (
@@ -77,7 +77,7 @@ export default function RestaurantFinder() {
                 >
                   {r.name}
                 </a>{" "}
-                <span className="text-zinc-500">
+                <span className="text-muted">
                   · {formatDistance(r.distance)} · {r.address}
                 </span>
               </li>
