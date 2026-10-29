@@ -1,6 +1,6 @@
 # 약속 장소 투표 지도
 
-친구들의 출발지를 모아 대중교통 이동 시간 기준 중간 지점(지하철역·버스 정류장)을 추천하고, 역 단위로 투표해 약속 장소를 정하는 웹 서비스 (해커톤용).
+친구들의 출발지를 모아 직선거리로 추정한 이동 시간 기준 중간 지점(지하철역)을 추천하고, 역 단위로 투표해 약속 장소를 정하는 웹 서비스 (해커톤용).
 스택: Next.js (App Router) · React · TypeScript · Tailwind CSS · Supabase · 카카오 로컬 API / 지도 JS SDK
 
 ## 서비스 정의
@@ -28,7 +28,7 @@
 
 - `rooms`: 방, 모임 이름(`name`), 상태(`collecting` · `voting` · `closed`), 투표 마감 시각(`vote_deadline`)
 - `participants`: 닉네임, 출발지 좌표
-- `candidates`: 후보 역(종류 `subway` · `bus`, 노선·버스 번호)과 점수, 근처 맛집·갈만한 곳 정보
+- `candidates`: 후보 역(종류 `subway` · `bus`, 지금은 `subway`만 사용, 노선)과 점수, 근처 맛집·갈만한 곳 정보
 - `travel_times`: (ODsay 제거로 현재 사용하지 않는다)
 - `votes`: 참여자 × 후보 역 한 행씩 (`participant_id`, `candidate_id`가 복합 키. 투표 추가·취소는 행 삽입·삭제)
 
