@@ -1,11 +1,50 @@
 import { NextResponse } from "next/server";
 import { errorResponse, readJson, serverError } from "@/lib/api";
 import { getServerSupabase } from "@/lib/supabase/server";
+import { buildStationCards } from "@/lib/vote/cards";
 import { isVotingClosed } from "@/lib/vote/deadline";
 import { isUuid } from "@/lib/validate";
 import type { VoteResponse } from "@/types";
+import type { VoteStateResponse } from "@/lib/vote/types";
 
 type Ctx = { params: Promise<{ id: string }> };
+
+/** 투표 화면에 필요한 모든 것: 역 카드, 표, 마감 상태. 서버 시각을 함께 보내 클라이언트 시계 오차를 보정한다. */
+export async function GET(_request: Request, { params }: Ctx) {
+  const { id } = await params;
+  if (!isUuid(id)) return errorResponse(400, "방 ID 가 올바르지 않습니다.", "INVALID_INPUT");
+
+  try {
+    const db = getServerSupabase();
+    const { data: room, error: roomError } = await db
+      .from("rooms")
+      .select("status, vote_deadline")
+      .eq("id", id)
+      .maybeSingle();
+    if (roomError) throw roomError;
+    if (!room) return errorResponse(404, "존재하지 않는 방입니다.", "ROOM_NOT_FOUND");
+
+    const [candidates, travelTimes, votes] = await Promise.all([
+      db.from("candidates").select("*").eq("room_id", id),
+      db.from("travel_times").select("participant_id, station_name, minutes, route").eq("room_id", id),
+      db.from("votes").select("participant_id, candidate_id").eq("room_id", id),
+    ]);
+    for (const r of [candidates, travelTimes, votes]) if (r.error) throw r.error;
+
+    const now = new Date();
+    return NextResponse.json<VoteStateResponse>({
+      stations: buildStationCards(candidates.data ?? [], travelTimes.data ?? []),
+      votes: (votes.data ?? []).map((v) => ({ participantId: v.participant_id, candidateId: v.candidate_id })),
+      status: room.status,
+      voteDeadline: room.vote_deadline,
+      closed: isVotingClosed(room, now),
+      approximate: (candidates.data ?? []).some((c) => c.approximate),
+      serverTime: now.toISOString(),
+    });
+  } catch (err) {
+    return serverError(err);
+  }
+}
 
 /** 역에 투표하거나(on: true) 내 표를 취소한다(on: false). 여러 역에 중복 투표할 수 있다. */
 export async function POST(request: Request, { params }: Ctx) {

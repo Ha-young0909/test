@@ -51,3 +51,15 @@ export interface VoteMark {
   participantId: string;
   candidateId: string;
 }
+
+/** GET /api/rooms/[id]/vote 응답. 투표 화면을 한 번에 그린다. */
+export interface VoteStateResponse {
+  stations: StationCardData[];
+  votes: VoteMark[];
+  status: "collecting" | "voting" | "closed";
+  voteDeadline: string | null;
+  /** 서버가 vote_deadline 으로 판단한 마감 여부 */
+  closed: boolean;
+  approximate: boolean;
+  serverTime: string;
+}
