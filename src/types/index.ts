@@ -8,12 +8,10 @@ export const GROUP_NAME_MAX_LENGTH = 20;
 export type RoomStatus = "collecting" | "voting" | "closed";
 /** 후보 역 종류: 지하철역 또는 버스 정류장. */
 export type StationKind = "subway" | "bus";
-export type PlaceCategory = "restaurant" | "cafe" | "bar";
 
 export interface Room {
   id: string;
   name: string | null;
-  category: PlaceCategory | null;
   status: RoomStatus;
   vote_deadline: string | null;
   created_at: string;
@@ -101,7 +99,6 @@ export interface ApiError {
 /** POST /api/rooms */
 export interface CreateRoomRequest {
   name?: string;
-  category?: PlaceCategory;
 }
 export interface CreateRoomResponse {
   roomId: string;
@@ -134,11 +131,10 @@ export interface UpdateOriginResponse {
   ok: true;
 }
 
-/** PATCH /api/rooms/[id] — 방장이 상태·카테고리를 바꾼다 (C·D 가 사용). */
+/** PATCH /api/rooms/[id] — 방장이 방 상태를 바꾼다 (C·D 가 사용). */
 export interface UpdateRoomRequest {
   hostId: string;
   status?: RoomStatus;
-  category?: PlaceCategory;
 }
 export interface UpdateRoomResponse {
   ok: true;

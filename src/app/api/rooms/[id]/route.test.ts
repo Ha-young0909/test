@@ -32,12 +32,6 @@ describe("PATCH /api/rooms/[id] (방장 전용 변경)", () => {
     expect(eqHost).toHaveBeenCalledWith("host_id", HOST);
   });
 
-  it("카테고리만 바꿀 수 있다", async () => {
-    select.mockResolvedValue({ data: [{ id: ROOM }], error: null });
-    await PATCH(req({ hostId: HOST, category: "bar" }), ctx());
-    expect(update).toHaveBeenCalledWith({ category: "bar" });
-  });
-
   it("방장 토큰이 맞지 않으면(갱신 0행) 403", async () => {
     select.mockResolvedValue({ data: [], error: null });
     const res = await PATCH(req({ hostId: HOST, status: "voting" }), ctx());
@@ -51,9 +45,8 @@ describe("PATCH /api/rooms/[id] (방장 전용 변경)", () => {
     expect(update).not.toHaveBeenCalled();
   });
 
-  it("알 수 없는 상태·카테고리는 400", async () => {
+  it("알 수 없는 상태는 400", async () => {
     expect((await PATCH(req({ hostId: HOST, status: "done" }), ctx())).status).toBe(400);
-    expect((await PATCH(req({ hostId: HOST, category: "pizza" }), ctx())).status).toBe(400);
   });
 
   it("변경할 값이 없으면 400", async () => {

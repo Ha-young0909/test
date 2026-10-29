@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isCategory, isUuid, isValidCoord, normalizeGroupName, normalizeNickname } from "./validate";
+import { isUuid, isValidCoord, normalizeGroupName, normalizeNickname } from "./validate";
 
 describe("normalizeNickname", () => {
   it("공백을 제거한다", () => expect(normalizeNickname("  민수 ")).toBe("민수"));
@@ -19,13 +19,6 @@ describe("isUuid", () => {
     expect(isUuid("00000000-0000-4000-8000-000000000001")).toBe(true);
     expect(isUuid("not-a-uuid")).toBe(false);
     expect(isUuid(undefined)).toBe(false);
-  });
-});
-
-describe("isCategory", () => {
-  it("정해진 카테고리만 통과한다", () => {
-    expect(isCategory("cafe")).toBe(true);
-    expect(isCategory("pizza")).toBe(false);
   });
 });
 
