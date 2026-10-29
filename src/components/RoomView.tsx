@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import JoinForm from "@/components/JoinForm";
 import Map from "@/components/Map";
 import OriginSearch, { type Origin } from "@/components/OriginSearch";
+import VoteSection from "@/components/VoteSection";
 import { getBrowserSupabase } from "@/lib/supabase/client";
 import { describeTopChange, requestMidpoint } from "@/lib/midpointClient";
 import { findOriginUpdates, snapshotOrigins, type OriginSnapshot } from "@/lib/originChanges";
@@ -236,13 +237,14 @@ export default function RoomView({ roomId }: { roomId: string }) {
               {canFind ? "" : ` (${MIN_PARTICIPANTS}명 이상 필요)`}
             </button>
           )}
+          {/* 후보가 생기면 바로 투표할 수 있고, 방장이 여기서 마감 시간을 정하면 투표 단계로 넘어간다. */}
+          {candidates.length > 0 && <VoteSection roomId={roomId} />}
         </section>
       ) : (
         <section className="space-y-5">
           {mapSection}
           <ParticipantList participants={participants} myId={myId} />
-          {/* D: 후보 목록·투표·결과(VotePanel, ResultView)가 여기에 연결된다. */}
-          <p className="text-sm text-gray-500">투표 화면은 곧 추가됩니다.</p>
+          <VoteSection roomId={roomId} />
         </section>
       )}
     </main>
@@ -275,7 +277,7 @@ function CandidateList({ candidates }: { candidates: CandidateRow[] }) {
     <section aria-label="후보 역" className="space-y-2">
       <h2 className="text-sm font-bold">후보 역 순위</h2>
       {candidates[0]?.approximate && (
-        <p className="text-[13px] text-[#B8381F]">대략적인 중간 지점이에요. 실제 이동 시간과 다를 수 있어요.</p>
+        <p className="text-[13px] text-[#B8381F]">직선거리로 추정한 대략적인 이동 시간이에요. 실제 대중교통 시간과 다를 수 있어요.</p>
       )}
       <ol className="space-y-1.5">
         {candidates.map((c) => (

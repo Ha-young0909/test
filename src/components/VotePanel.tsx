@@ -34,7 +34,9 @@ export default function VotePanel({
   const [tab, setTab] = useState<StationTab>("all");
   const tabCounts = countByTab(stations);
   const voteCounts = countVotes(votes);
-  const shown = filterStations(stations, tab);
+  // 버스 후보는 보류라 지하철만 있으면 탭이 필요 없다. 두 종류가 모두 있을 때만 보인다.
+  const showTabs = tabCounts.subway > 0 && tabCounts.bus > 0;
+  const shown = filterStations(stations, showTabs ? tab : "all");
   const myVoteCount = myParticipantId ? votes.filter((v) => v.participantId === myParticipantId).length : 0;
 
   return (
@@ -50,6 +52,7 @@ export default function VotePanel({
         이동 시간은 <b>직선거리로 계산한 예상값</b>이에요. 실제 대중교통 시간과 다를 수 있어요.
       </p>
 
+      {showTabs && (
       <div role="tablist" aria-label="역 종류" className="flex gap-2">
         {TABS.map((t) => {
           const active = tab === t.key;
@@ -70,6 +73,7 @@ export default function VotePanel({
           );
         })}
       </div>
+      )}
 
       {shown.length === 0 ? (
         <p className="rounded-[14px] bg-[#F7F6F2] px-4 py-6 text-center text-sm text-[#4A554F]">
