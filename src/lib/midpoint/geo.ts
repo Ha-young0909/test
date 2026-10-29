@@ -27,7 +27,7 @@ export function walkMinutes(meters: number): number {
   return Math.max(1, Math.ceil(meters / 67));
 }
 
-/** ODsay 를 쓸 수 없을 때의 대략적인 대중교통 시간(분): 우회율 1.4, 시속 24km, 대기·환승 10분. */
+/** 직선거리로 추정한 대략적인 대중교통 시간(분): 우회율 1.4, 시속 24km, 대기·환승 10분. */
 export function estimateTransitMinutes(meters: number): number {
   return Math.round((meters * 1.4) / 400 + 10);
 }

@@ -2,25 +2,15 @@ import { NextResponse } from "next/server";
 import { errorResponse, readJson, serverError } from "@/lib/api";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { isUuid } from "@/lib/validate";
-import { computeMidpoint, legKey, type Origin } from "@/lib/midpoint/engine";
+import { computeMidpoint, type Origin } from "@/lib/midpoint/engine";
 import { findSubwayStations } from "@/lib/midpoint/kakao";
-import { findBusStops, getTransitLeg, type OdsayConfig } from "@/lib/midpoint/odsay";
 import { acquireRoom, releaseRoom } from "@/lib/midpoint/lock";
-import type { CachedLeg } from "@/lib/midpoint/rank";
 import { MIN_PARTICIPANTS, type MidpointResponse, type MidpointStation } from "@/types";
 
 type Ctx = { params: Promise<{ id: string }> };
 
-// 후보 8곳 × 참여자 6명의 첫 조회는 수 초가 걸릴 수 있다.
-export const maxDuration = 30;
-
-const DEFAULT_ODSAY_ORIGIN = "http://localhost:3000";
-
-/** ODsay 키가 없으면 null: 엔진이 평균 좌표 폴백으로 동작한다. */
-function odsayConfig(): OdsayConfig | null {
-  const apiKey = process.env.ODSAY_API_KEY;
-  return apiKey ? { apiKey, origin: process.env.ODSAY_ORIGIN || DEFAULT_ODSAY_ORIGIN } : null;
-}
+// 카카오 역 검색과 DB 저장만 하므로 길어도 몇 초면 끝난다.
+export const maxDuration = 10;
 
 /**
  * 방장 또는 방 참여자가 호출하면 참여자 출발지로 후보 역을 다시 계산해 candidates 에 저장하고 순위를 돌려준다.
@@ -79,60 +69,22 @@ export async function POST(request: Request, { params }: Ctx) {
       return errorResponse(400, `출발지를 입력한 참여자가 ${MIN_PARTICIPANTS}명 이상 필요해요.`, "INVALID_INPUT");
     }
 
-    const [cachedRes, topRes] = await Promise.all([
-      db.from("travel_times").select("participant_id, station_name, station_lat, station_lng, minutes, route").eq("room_id", id),
-      db.from("candidates").select("name").eq("room_id", id).eq("number", 1).maybeSingle(),
-    ]);
-    if (cachedRes.error) throw cachedRes.error;
-    if (topRes.error) throw topRes.error;
-    const previousTop = (topRes.data?.name as string | undefined) ?? null;
+    const { data: topRow, error: topError } = await db
+      .from("candidates")
+      .select("name")
+      .eq("room_id", id)
+      .eq("number", 1)
+      .maybeSingle();
+    if (topError) throw topError;
+    const previousTop = (topRow?.name as string | undefined) ?? null;
 
-    const cache = new Map<string, CachedLeg>();
-    for (const row of cachedRes.data ?? []) {
-      cache.set(legKey(row.participant_id, row.station_name), {
-        minutes: row.minutes,
-        route: row.route ?? "대중교통",
-        lat: row.station_lat,
-        lng: row.station_lng,
-      });
-    }
-
-    const odsay = odsayConfig();
     const kakaoKey = process.env.KAKAO_REST_API_KEY;
-    const result = await computeMidpoint(
-      origins,
-      {
-        findSubway: async (center, radius) => {
-          if (!kakaoKey) throw new Error("KAKAO_REST_API_KEY 가 설정되지 않았습니다.");
-          return findSubwayStations(center, radius, kakaoKey);
-        },
-        findBus: async (center, radius) => {
-          if (!odsay) throw new Error("ODSAY_API_KEY 가 설정되지 않았습니다.");
-          return findBusStops(center, radius, odsay);
-        },
-        travel: async (from, to) => {
-          if (!odsay) throw new Error("ODSAY_API_KEY 가 설정되지 않았습니다.");
-          return getTransitLeg(from, to, odsay);
-        },
+    const result = await computeMidpoint(origins, {
+      findSubway: async (center, radius) => {
+        if (!kakaoKey) throw new Error("KAKAO_REST_API_KEY 가 설정되지 않았습니다.");
+        return findSubwayStations(center, radius, kakaoKey);
       },
-      cache,
-    );
-
-    if (result.fresh.length > 0) {
-      const { error } = await db.from("travel_times").upsert(
-        result.fresh.map(({ participantId, station, leg }) => ({
-          room_id: id,
-          participant_id: participantId,
-          station_name: station.name,
-          station_lat: station.lat,
-          station_lng: station.lng,
-          minutes: leg.minutes,
-          route: leg.route,
-        })),
-        { onConflict: "participant_id,station_name" },
-      );
-      if (error) throw error;
-    }
+    });
 
     const { error: upsertError } = await db.from("candidates").upsert(
       result.stations.map((s, i) => ({
