@@ -9,7 +9,6 @@ const tables = {
   room: vi.fn(),
   participants: vi.fn(),
   travelTimes: vi.fn(),
-  top: vi.fn(),
   stored: vi.fn(),
   caller: vi.fn(),
 };
@@ -31,16 +30,20 @@ vi.mock("@/lib/supabase/server", () => ({
       }
       if (table === "travel_times") return { select: () => ({ eq: tables.travelTimes }), upsert: upsertTimes };
       return {
-        select: (cols: string) =>
-          cols === "name"
-            ? { eq: () => ({ eq: () => ({ maybeSingle: tables.top }) }) }
-            : { eq: tables.stored },
+        select: () => ({ eq: tables.stored }),
         upsert: upsertCandidates,
         delete: () => ({ in: deleteIn }),
       };
     },
   }),
 }));
+
+const compute = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/midpoint/engine", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/midpoint/engine")>();
+  compute.mockImplementation(actual.computeMidpoint);
+  return { ...actual, computeMidpoint: compute };
+});
 
 import { resetLocks } from "@/lib/midpoint/lock";
 import { POST } from "./route";
@@ -63,8 +66,10 @@ beforeEach(() => {
   });
   tables.caller.mockResolvedValue({ data: { token: TOKEN }, error: null });
   tables.travelTimes.mockResolvedValue({ data: [], error: null });
-  tables.top.mockResolvedValue({ data: { name: "이전역" }, error: null });
-  tables.stored.mockResolvedValue({ data: [{ id: "old", kind: "subway", name: "이전역" }], error: null });
+  tables.stored.mockResolvedValue({
+    data: [{ id: "old", kind: "subway", name: "이전역", number: 1, approximate: false }],
+    error: null,
+  });
   upsertCandidates.mockResolvedValue({ error: null });
   upsertTimes.mockResolvedValue({ error: null });
   deleteIn.mockResolvedValue({ error: null });
@@ -94,30 +99,62 @@ describe("POST /api/rooms/[id]/midpoint", () => {
     expect((await res.json()).code).toBe("INVALID_INPUT");
   });
 
-  it("키가 없으면 평균 좌표 폴백으로 후보를 저장하고 approximate 를 알린다", async () => {
+  it("키가 없으면 평균 좌표 한 곳으로 알리되, 투표 대상으로 저장하지 않고 기존 후보도 지키지 않는다", async () => {
     const res = await POST(req({ hostId: HOST }), ctx());
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.approximate).toBe(true);
     expect(body.stations).toHaveLength(1);
     expect(body.stations[0]).toMatchObject({ name: "대략적인 중간 지점", lat: 37.5, lng: 127 });
-    expect(body.previousTop).toBe("이전역");
-    expect(body.topChanged).toBe(true);
+    expect(body.topChanged).toBe(false);
     expect(upsertTimes).not.toHaveBeenCalled(); // 추정값은 캐시하지 않는다
-    expect(upsertCandidates).toHaveBeenCalledWith(
-      [expect.objectContaining({ room_id: ROOM, number: 1, approximate: true, kind: "subway" })],
-      { onConflict: "room_id,kind,name" },
-    );
-    expect(deleteIn).toHaveBeenCalledWith("id", ["old"]); // 후보에서 빠진 이전 1순위만 지운다
+    expect(upsertCandidates).not.toHaveBeenCalled();
+    expect(deleteIn).not.toHaveBeenCalled(); // 일시적 실패로 기존 후보와 표를 지우지 않는다
   });
 
-  it("처음 계산이면 topChanged 가 false", async () => {
-    tables.top.mockResolvedValue({ data: null, error: null });
+  const station = (name: string, approximate = false) => ({
+    stations: [
+      { kind: "subway", name, address: null, lat: 37.5, lng: 127, lines: ["2호선"], maxMinutes: 40, avgMinutes: 30, over90: false, routes: [] },
+    ],
+    approximate,
+    fresh: [],
+  });
+
+  it("실제 계산 결과는 이름 기준으로 저장하고 후보에서 빠진 역만 지우며 1순위 변경을 알린다", async () => {
+    compute.mockResolvedValueOnce(station("강남역"));
+    const body = await (await POST(req({ hostId: HOST }), ctx())).json();
+    expect(upsertCandidates).toHaveBeenCalledWith(
+      [expect.objectContaining({ room_id: ROOM, number: 1, name: "강남역", approximate: false, kind: "subway" })],
+      { onConflict: "room_id,kind,name" },
+    );
+    expect(deleteIn).toHaveBeenCalledWith("id", ["old"]);
+    expect(body.previousTop).toBe("이전역");
+    expect(body.topChanged).toBe(true);
+  });
+
+  it("처음 계산이면 topChanged 가 false 이고 지울 것이 없다", async () => {
     tables.stored.mockResolvedValue({ data: [], error: null });
+    compute.mockResolvedValueOnce(station("강남역"));
     const body = await (await POST(req({ hostId: HOST }), ctx())).json();
     expect(body.topChanged).toBe(false);
     expect(body.previousTop).toBeNull();
     expect(deleteIn).not.toHaveBeenCalled();
+  });
+
+  it("이미 실제 후보가 있으면 추정 결과로 덮어쓰지 않는다", async () => {
+    compute.mockResolvedValueOnce(station("강남역", true));
+    const body = await (await POST(req({ hostId: HOST }), ctx())).json();
+    expect(body.approximate).toBe(true);
+    expect(body.topChanged).toBe(false);
+    expect(upsertCandidates).not.toHaveBeenCalled();
+    expect(deleteIn).not.toHaveBeenCalled();
+  });
+
+  it("후보가 없을 때의 추정 결과(실제 역)는 approximate 로 저장한다", async () => {
+    tables.stored.mockResolvedValue({ data: [], error: null });
+    compute.mockResolvedValueOnce(station("강남역", true));
+    await POST(req({ hostId: HOST }), ctx());
+    expect(upsertCandidates).toHaveBeenCalledWith([expect.objectContaining({ name: "강남역", approximate: true })], expect.anything());
   });
 
   it("참여자도 자기 토큰으로 호출할 수 있다", async () => {

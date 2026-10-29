@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { errorResponse, readJson, serverError } from "@/lib/api";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { isUuid } from "@/lib/validate";
-import { computeMidpoint, legKey, type Origin } from "@/lib/midpoint/engine";
+import { APPROXIMATE_NAME, computeMidpoint, legKey, type Origin } from "@/lib/midpoint/engine";
 import { findSubwayStations } from "@/lib/midpoint/kakao";
 import { findBusStops, getTransitLeg, type OdsayConfig } from "@/lib/midpoint/odsay";
 import { acquireRoom, releaseRoom } from "@/lib/midpoint/lock";
@@ -79,13 +79,14 @@ export async function POST(request: Request, { params }: Ctx) {
       return errorResponse(400, `출발지를 입력한 참여자가 ${MIN_PARTICIPANTS}명 이상 필요해요.`, "INVALID_INPUT");
     }
 
-    const [cachedRes, topRes] = await Promise.all([
+    const [cachedRes, existingRes] = await Promise.all([
       db.from("travel_times").select("participant_id, station_name, station_lat, station_lng, minutes, route").eq("room_id", id),
-      db.from("candidates").select("name").eq("room_id", id).eq("number", 1).maybeSingle(),
+      db.from("candidates").select("id, kind, name, number, approximate").eq("room_id", id),
     ]);
     if (cachedRes.error) throw cachedRes.error;
-    if (topRes.error) throw topRes.error;
-    const previousTop = (topRes.data?.name as string | undefined) ?? null;
+    if (existingRes.error) throw existingRes.error;
+    const existing = existingRes.data ?? [];
+    const previousTop = (existing.find((c) => c.number === 1)?.name as string | undefined) ?? null;
 
     const cache = new Map<string, CachedLeg>();
     for (const row of cachedRes.data ?? []) {
@@ -134,33 +135,38 @@ export async function POST(request: Request, { params }: Ctx) {
       if (error) throw error;
     }
 
-    const { error: upsertError } = await db.from("candidates").upsert(
-      result.stations.map((s, i) => ({
-        room_id: id,
-        kind: s.kind,
-        number: i + 1,
-        name: s.name,
-        address: s.address,
-        lat: s.lat,
-        lng: s.lng,
-        lines: s.lines,
-        max_minutes: s.maxMinutes,
-        avg_minutes: s.avgMinutes,
-        over90: s.over90,
-        approximate: result.approximate,
-      })),
-      { onConflict: "room_id,kind,name" },
-    );
-    if (upsertError) throw upsertError;
+    // 평균 좌표 한 곳짜리 대체 결과는 실제로 갈 수 있는 역이 아니라서 투표 대상으로 저장하지 않는다.
+    // 이미 실제 이동 시간으로 계산한 후보가 있으면, 일시적인 API 실패로 그 후보와 표를 덮어쓰지 않는다.
+    const placeholder = result.approximate && result.stations.every((s) => s.name === APPROXIMATE_NAME);
+    const persist = !placeholder && !(result.approximate && existing.some((c) => !c.approximate));
 
-    // 후보에서 빠진 역(과 그 역의 표)만 지운다.
-    const { data: stored, error: storedError } = await db.from("candidates").select("id, kind, name").eq("room_id", id);
-    if (storedError) throw storedError;
-    const keep = new Set(result.stations.map((s) => `${s.kind}|${s.name}`));
-    const staleIds = (stored ?? []).filter((c) => !keep.has(`${c.kind}|${c.name}`)).map((c) => c.id as string);
-    if (staleIds.length > 0) {
-      const { error } = await db.from("candidates").delete().in("id", staleIds);
-      if (error) throw error;
+    if (persist) {
+      const { error: upsertError } = await db.from("candidates").upsert(
+        result.stations.map((s, i) => ({
+          room_id: id,
+          kind: s.kind,
+          number: i + 1,
+          name: s.name,
+          address: s.address,
+          lat: s.lat,
+          lng: s.lng,
+          lines: s.lines,
+          max_minutes: s.maxMinutes,
+          avg_minutes: s.avgMinutes,
+          over90: s.over90,
+          approximate: result.approximate,
+        })),
+        { onConflict: "room_id,kind,name" },
+      );
+      if (upsertError) throw upsertError;
+
+      // 후보에서 빠진 역(과 그 역의 표)만 지운다.
+      const keep = new Set(result.stations.map((s) => `${s.kind}|${s.name}`));
+      const staleIds = existing.filter((c) => !keep.has(`${c.kind}|${c.name}`)).map((c) => c.id as string);
+      if (staleIds.length > 0) {
+        const { error } = await db.from("candidates").delete().in("id", staleIds);
+        if (error) throw error;
+      }
     }
 
     const stations: MidpointStation[] = result.stations.map((s) => ({
@@ -178,7 +184,7 @@ export async function POST(request: Request, { params }: Ctx) {
     return NextResponse.json<MidpointResponse>({
       stations,
       approximate: result.approximate,
-      topChanged: previousTop !== null && top !== null && previousTop !== top,
+      topChanged: persist && previousTop !== null && top !== null && previousTop !== top,
       previousTop,
     });
   } catch (err) {
