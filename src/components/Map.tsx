@@ -88,12 +88,12 @@ function loadKakaoSdk(): Promise<KakaoMaps> {
 }
 
 // 닉네임 등 사용자 입력이 들어가므로 textContent로만 채운다.
-function pin(kind: "participant" | "station" | "candidate", label: string, text?: string): HTMLElement {
+function pin(kind: "participant" | "station" | "candidate" | "top", label: string, text?: string): HTMLElement {
   const wrap = document.createElement("div");
   wrap.style.cssText = "display:flex;flex-direction:column;align-items:center;pointer-events:none;";
 
   const dot = document.createElement("div");
-  const colors = { participant: "#2563eb", station: "#dc2626", candidate: "#16a34a" };
+  const colors = { participant: "#2563eb", station: "#dc2626", candidate: "#16a34a", top: "#dc2626" };
   dot.style.cssText = `min-width:26px;height:26px;padding:0 6px;border-radius:13px;background:${colors[kind]};color:#fff;font:700 13px/26px sans-serif;text-align:center;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.4);white-space:nowrap;`;
   dot.textContent = label;
   wrap.appendChild(dot);
@@ -113,6 +113,8 @@ export default function Map({ participants = [], station = null, candidates = []
   const mapRef = useRef<KakaoMapInstance | null>(null);
   const overlaysRef = useRef<KakaoOverlay[]>([]);
   const [maps, setMaps] = useState<KakaoMaps | null>(null);
+  // 방 화면이 주기적으로 재조회해 새 배열이 와도, 내용이 같으면 지도를 다시 그리지 않는다.
+  const signature = JSON.stringify({ participants, station, candidates });
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -127,6 +129,11 @@ export default function Map({ participants = [], station = null, candidates = []
 
   useEffect(() => {
     if (!maps || !containerRef.current) return;
+    const { participants, station, candidates } = JSON.parse(signature) as {
+      participants: ParticipantPin[];
+      station: StationPin | null;
+      candidates: CandidatePin[];
+    };
     if (!mapRef.current) {
       mapRef.current = new maps.Map(containerRef.current, {
         center: new maps.LatLng(DEFAULT_CENTER.lat, DEFAULT_CENTER.lng),
@@ -150,7 +157,7 @@ export default function Map({ participants = [], station = null, candidates = []
     };
 
     participants.forEach((p) => add(p, pin("participant", p.nickname.slice(0, 1) || "?", p.nickname), 1));
-    candidates.forEach((c) => add(c, pin("candidate", String(c.number), c.name), 2));
+    candidates.forEach((c) => add(c, pin(c.number === 1 ? "top" : "candidate", String(c.number), c.name), c.number === 1 ? 3 : 2));
     if (station) add(station, pin("station", "역", station.name), 3);
 
     map.relayout();
@@ -160,7 +167,7 @@ export default function Map({ participants = [], station = null, candidates = []
       const only = station ?? candidates[0] ?? participants[0];
       map.setCenter(new maps.LatLng(only.lat, only.lng));
     }
-  }, [maps, participants, station, candidates]);
+  }, [maps, signature]);
 
   if (error) {
     return (
