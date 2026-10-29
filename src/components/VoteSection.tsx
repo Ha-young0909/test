@@ -17,6 +17,7 @@ export default function VoteSection({ roomId }: { roomId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [skew, setSkew] = useState(0); // 서버 시각 - 내 시계
   const [nowMs, setNowMs] = useState(() => Date.now());
+  const placesRequested = useRef(false); // 맛집·갈만한 곳 채우기는 화면마다 한 번만 요청한다.
   const pending = useRef(0); // 진행 중인 내 요청 수. 있으면 폴링 결과로 덮어쓰지 않는다.
 
   // 로딩 문구만 그리는 동안은 서버 렌더와 같으므로 처음부터 localStorage 를 읽어도 된다.
@@ -51,6 +52,22 @@ export default function VoteSection({ roomId }: { roomId: string }) {
       clearInterval(clock);
     };
   }, [refresh]);
+
+  // 방장 화면에서 맛집·갈만한 곳이 비어 있는 후보 역이 있으면 한 번 채운다 (이미 채워진 역은 서버가 건드리지 않는다).
+  const needsPlaces = !!state?.stations.some((s) => s.restaurants.length === 0 && s.spots.length === 0);
+  useEffect(() => {
+    if (!needsPlaces || !me.hostId || placesRequested.current) return;
+    placesRequested.current = true;
+    fetch(`/api/rooms/${roomId}/places`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ hostId: me.hostId }),
+    })
+      .then(() => refresh())
+      .catch(() => {
+        placesRequested.current = false; // 다음 재조회 때 다시 시도
+      });
+  }, [needsPlaces, me.hostId, roomId, refresh]);
 
   async function onToggleVote(candidateId: string) {
     if (!state || !me.id || !me.token || state.closed) return;

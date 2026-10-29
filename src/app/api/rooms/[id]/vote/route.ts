@@ -81,7 +81,7 @@ export async function POST(request: Request, { params }: Ctx) {
       .maybeSingle();
     if (roomError) throw roomError;
     if (!room) return errorResponse(404, "존재하지 않는 방입니다.", "ROOM_NOT_FOUND");
-    if (isVotingClosed(room)) return errorResponse(409, "투표가 마감되었습니다.", "FORBIDDEN");
+    if (isVotingClosed(room)) return errorResponse(409, "투표가 마감되었습니다.", "VOTE_CLOSED");
 
     if (body.on) {
       const { data: candidate, error: candError } = await db

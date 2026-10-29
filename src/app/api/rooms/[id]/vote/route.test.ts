@@ -79,7 +79,9 @@ describe("POST /api/rooms/[id]/vote", () => {
 
   it("마감 시각이 지나면 거부한다", async () => {
     room.mockResolvedValue({ data: { status: "voting", vote_deadline: "2020-01-01T00:00:00Z" }, error: null });
-    expect((await POST(req(valid), ctx)).status).toBe(409);
+    const res = await POST(req(valid), ctx);
+    expect(res.status).toBe(409);
+    expect((await res.json()).code).toBe("VOTE_CLOSED");
     expect(upsert).not.toHaveBeenCalled();
   });
 

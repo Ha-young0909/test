@@ -64,6 +64,4 @@ describe("PATCH /api/rooms/[id] (방장 전용 변경)", () => {
   });
 
   // 문서(CLAUDE.md)에는 있으나 코드·스키마에 아직 없는 항목. 구현되면 테스트로 바꾼다.
-  it.todo("status 'closed' 로 즉시 마감하고 다시 열 수 있다");
-  it.todo("vote_deadline(30분·1시간·3시간·하루)을 설정한다");
 });

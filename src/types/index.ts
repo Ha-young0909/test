@@ -93,7 +93,7 @@ export interface TravelTime {
 /** 모든 API 에러 응답 형태. */
 export interface ApiError {
   error: string;
-  code?: "ROOM_NOT_FOUND" | "ROOM_FULL" | "NICKNAME_TAKEN" | "INVALID_INPUT" | "FORBIDDEN" | "RATE_LIMITED";
+  code?: "ROOM_NOT_FOUND" | "ROOM_FULL" | "NICKNAME_TAKEN" | "INVALID_INPUT" | "FORBIDDEN" | "RATE_LIMITED" | "VOTE_CLOSED";
 }
 
 /** POST /api/rooms */
