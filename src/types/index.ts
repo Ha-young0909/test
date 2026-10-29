@@ -169,10 +169,10 @@ export interface MidpointStation {
 export interface MidpointResponse {
   stations: MidpointStation[];
   approximate: boolean;
-  /** 이전 계산의 1순위와 이번 1순위가 다르면 true ("1순위가 △△으로 바뀌었어요" 안내용). */
-  topChanged: boolean;
-  /** 이전 계산의 1순위 역 이름. 처음 계산이면 null. */
-  previousTop: string | null;
+  /** 이전 계산 대비 1순위 역이 바뀌었는지 */
+  topChanged?: boolean;
+  /** 이전 계산의 1순위 역 이름 (없으면 null) */
+  previousTop?: string | null;
 }
 
 /** POST /api/rooms/[id]/places (D) */
