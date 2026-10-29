@@ -28,7 +28,7 @@
 
 - `rooms`: 방, 모임 이름(`name`), 상태(`collecting` · `voting` · `closed`), 투표 마감 시각(`vote_deadline`)
 - `participants`: 닉네임, 출발지 좌표
-- `candidates`: 후보 역(종류 `subway` · `bus`, 노선·버스 번호)과 점수, 근처 맛집·갈만한 곳 정보
+- `candidates`: 후보 역(종류 `subway` · `bus`, 지금은 `subway`만 사용, 노선)과 점수, 근처 맛집·갈만한 곳 정보
 - `travel_times`: 현재 사용하지 않는다 (ODsay 제거로 이동 시간 캐시가 필요 없어짐)
 - `votes`: 참여자 × 후보 역 한 행씩 (`participant_id`, `candidate_id`가 복합 키. 투표 추가·취소는 행 삽입·삭제)
 
