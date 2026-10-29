@@ -8,13 +8,11 @@ const P2 = "00000000-0000-4000-8000-0000000000b2";
 const tables = {
   room: vi.fn(),
   participants: vi.fn(),
-  travelTimes: vi.fn(),
   top: vi.fn(),
   stored: vi.fn(),
   caller: vi.fn(),
 };
 const upsertCandidates = vi.fn();
-const upsertTimes = vi.fn();
 const deleteIn = vi.fn();
 
 vi.mock("@/lib/supabase/server", () => ({
@@ -29,7 +27,6 @@ vi.mock("@/lib/supabase/server", () => ({
               : { eq: tables.participants },
         };
       }
-      if (table === "travel_times") return { select: () => ({ eq: tables.travelTimes }), upsert: upsertTimes };
       return {
         select: (cols: string) =>
           cols === "name"
@@ -52,7 +49,7 @@ const req = (body: unknown) => new Request("http://test", { method: "POST", body
 
 beforeEach(() => {
   resetLocks();
-  for (const fn of [...Object.values(tables), upsertCandidates, upsertTimes, deleteIn]) fn.mockReset();
+  for (const fn of [...Object.values(tables), upsertCandidates, deleteIn]) fn.mockReset();
   tables.room.mockResolvedValue({ data: { id: ROOM, host_id: HOST }, error: null });
   tables.participants.mockResolvedValue({
     data: [
@@ -62,14 +59,11 @@ beforeEach(() => {
     error: null,
   });
   tables.caller.mockResolvedValue({ data: { token: TOKEN }, error: null });
-  tables.travelTimes.mockResolvedValue({ data: [], error: null });
   tables.top.mockResolvedValue({ data: { name: "이전역" }, error: null });
   tables.stored.mockResolvedValue({ data: [{ id: "old", kind: "subway", name: "이전역" }], error: null });
   upsertCandidates.mockResolvedValue({ error: null });
-  upsertTimes.mockResolvedValue({ error: null });
   deleteIn.mockResolvedValue({ error: null });
   vi.stubEnv("KAKAO_REST_API_KEY", "");
-  vi.stubEnv("ODSAY_API_KEY", "");
   vi.spyOn(console, "error").mockImplementation(() => {});
 });
 
@@ -94,7 +88,7 @@ describe("POST /api/rooms/[id]/midpoint", () => {
     expect((await res.json()).code).toBe("INVALID_INPUT");
   });
 
-  it("키가 없으면 평균 좌표 폴백으로 후보를 저장하고 approximate 를 알린다", async () => {
+  it("카카오 키가 없으면 평균 좌표 폴백으로 후보를 저장하고 approximate 를 알린다", async () => {
     const res = await POST(req({ hostId: HOST }), ctx());
     expect(res.status).toBe(200);
     const body = await res.json();
@@ -103,12 +97,27 @@ describe("POST /api/rooms/[id]/midpoint", () => {
     expect(body.stations[0]).toMatchObject({ name: "대략적인 중간 지점", lat: 37.5, lng: 127 });
     expect(body.previousTop).toBe("이전역");
     expect(body.topChanged).toBe(true);
-    expect(upsertTimes).not.toHaveBeenCalled(); // 추정값은 캐시하지 않는다
     expect(upsertCandidates).toHaveBeenCalledWith(
       [expect.objectContaining({ room_id: ROOM, number: 1, approximate: true, kind: "subway" })],
       { onConflict: "room_id,kind,name" },
     );
     expect(deleteIn).toHaveBeenCalledWith("id", ["old"]); // 후보에서 빠진 이전 1순위만 지운다
+  });
+
+  it("카카오에서 찾은 역을 직선거리 추정 시간으로 순위 매겨 저장한다", async () => {
+    vi.stubEnv("KAKAO_REST_API_KEY", "test-key");
+    const doc = (name: string, x: string) => ({ place_name: `${name} 2호선`, category_name: "교통,수송 > 지하철,전철 > 수도권2호선", x, y: "37.5" });
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(Response.json({ documents: [doc("먼역", "127.08"), doc("가운데역", "127.0")] }));
+    const body = await (await POST(req({ hostId: HOST }), ctx())).json();
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(String(fetchSpy.mock.calls[0][0])).toContain("category_group_code=SW8");
+    expect(body.approximate).toBe(false);
+    expect(body.stations.map((s: { name: string }) => s.name)).toEqual(["가운데역", "먼역"]);
+    expect(body.stations[0].routes.every((r: { route: string }) => r.route === "직선거리 추정")).toBe(true);
+    expect(upsertCandidates.mock.calls[0][0][0]).toMatchObject({ number: 1, name: "가운데역", approximate: false });
+    fetchSpy.mockRestore();
   });
 
   it("처음 계산이면 topChanged 가 false", async () => {
@@ -142,7 +151,7 @@ describe("POST /api/rooms/[id]/midpoint", () => {
   });
 
   it("실패해도 잠금이 풀린다", async () => {
-    tables.travelTimes.mockRejectedValueOnce(new Error("db down"));
+    tables.top.mockRejectedValueOnce(new Error("db down"));
     const failed = await POST(req({ hostId: HOST }), ctx());
     expect(failed.status).toBe(500);
     expect((await failed.json()).error).not.toContain("db down");

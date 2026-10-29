@@ -277,6 +277,7 @@ function CandidateList({ candidates }: { candidates: CandidateRow[] }) {
       {candidates[0]?.approximate && (
         <p className="text-[13px] text-[#B8381F]">대략적인 중간 지점이에요. 실제 이동 시간과 다를 수 있어요.</p>
       )}
+      <p className="text-[13px] text-gray-500">출발지에서 역까지 직선거리로 추정한 예상 시간이에요.</p>
       <ol className="space-y-1.5">
         {candidates.map((c) => (
           <li

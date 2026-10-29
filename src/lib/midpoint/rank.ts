@@ -1,16 +1,12 @@
 import type { StationKind } from "@/types";
-import type { LatLng } from "./geo";
 
 export const OVER_LIMIT_MINUTES = 90;
 
 export interface Leg {
   minutes: number;
-  /** 이용 노선·버스 (예: '2호선 → 3호선', '472번'). */
+  /** 이동 방식 설명. 지금은 직선거리 추정이라 고정 문구다. */
   route: string;
 }
-
-/** travel_times 에 저장된 구간. 좌표는 같은 이름의 다른 정류장을 가려내는 데 쓴다. */
-export interface CachedLeg extends Leg, LatLng {}
 
 export interface StationSeed {
   kind: StationKind;
