@@ -10,11 +10,14 @@ export interface Origin {
 }
 
 interface OriginSearchProps {
-  onSelect: (origin: Origin) => void;
+  /** "내 출발지 등록하기"를 눌렀을 때 호출한다. 실패하면 throw 해서 메시지를 보여 준다. */
+  onSubmit: (origin: Origin) => Promise<void> | void;
+  /** 이미 등록한 출발지 이름. 있으면 버튼 문구가 "출발지 변경하기"가 된다. */
+  registeredLabel?: string | null;
   disabled?: boolean;
 }
 
-export default function OriginSearch({ onSelect, disabled }: OriginSearchProps) {
+export default function OriginSearch({ onSubmit, registeredLabel, disabled }: OriginSearchProps) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<Origin[]>([]);
   const [loading, setLoading] = useState(false);
@@ -22,6 +25,8 @@ export default function OriginSearch({ onSelect, disabled }: OriginSearchProps) 
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<Origin | null>(null);
   const [locating, setLocating] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [done, setDone] = useState(false);
   const skipNextSearch = useRef(false);
 
   useEffect(() => {
@@ -64,7 +69,21 @@ export default function OriginSearch({ onSelect, disabled }: OriginSearchProps) 
     setSearched(false);
     setError(null);
     setSelected(origin);
-    onSelect(origin);
+    setDone(false);
+  }
+
+  async function submit() {
+    if (!selected) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      await onSubmit(selected);
+      setDone(true);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "출발지를 저장하지 못했습니다.");
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   function useCurrentLocation() {
@@ -97,11 +116,25 @@ export default function OriginSearch({ onSelect, disabled }: OriginSearchProps) 
   }
 
   return (
-    <div className="w-full">
-      <label htmlFor="origin-search" className="mb-1 block text-sm font-medium">
-        출발지
+    <div className="flex w-full flex-col gap-2 text-[#17201B]">
+      <label htmlFor="origin-search" className="text-sm font-bold">
+        내 출발지
       </label>
-      <div className="flex gap-2">
+      <div className="relative flex">
+        <svg
+          width="20"
+          height="20"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="#4A554F"
+          strokeWidth="2"
+          strokeLinecap="round"
+          aria-hidden="true"
+          className="absolute top-[18px] left-4"
+        >
+          <circle cx="11" cy="11" r="7" />
+          <path d="m20 20-3.5-3.5" />
+        </svg>
         <input
           id="origin-search"
           type="search"
@@ -110,59 +143,87 @@ export default function OriginSearch({ onSelect, disabled }: OriginSearchProps) 
           onChange={(e) => {
             setQuery(e.target.value);
             setSelected(null);
+            setDone(false);
             if (e.target.value.trim().length < 2) {
               setResults([]);
               setSearched(false);
               setLoading(false);
             }
           }}
-          placeholder="주소 또는 장소 검색 (예: 홍대입구역)"
+          placeholder="주소나 장소를 검색하세요"
           autoComplete="off"
-          className="min-w-0 flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+          className="h-14 min-w-0 flex-1 rounded-[14px] border-[1.5px] border-[#17201B] bg-white pr-4 pl-[46px] text-base placeholder:text-[#6B7570] focus:outline-2 focus:outline-offset-2 focus:outline-[#E8553D]"
         />
-        <button
-          type="button"
-          onClick={useCurrentLocation}
-          disabled={disabled || locating}
-          className="shrink-0 rounded-lg border border-gray-300 px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-50"
-        >
-          {locating ? "확인 중…" : "현재 위치 사용"}
-        </button>
       </div>
 
-      {loading && <p className="mt-2 text-sm text-gray-500">검색 중…</p>}
+      <button
+        type="button"
+        onClick={useCurrentLocation}
+        disabled={disabled || locating}
+        className="flex min-h-11 items-center gap-1.5 self-start text-sm font-bold text-[#B8381F] disabled:opacity-50"
+      >
+        <svg
+          width="18"
+          height="18"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="#B8381F"
+          strokeWidth="2"
+          strokeLinecap="round"
+          aria-hidden="true"
+        >
+          <circle cx="12" cy="12" r="3" />
+          <circle cx="12" cy="12" r="8" />
+          <path d="M12 2v3M12 19v3M2 12h3M19 12h3" />
+        </svg>
+        {locating ? "위치 확인 중…" : "현재 위치 사용"}
+      </button>
+
+      {loading && <p className="text-sm text-[#4A554F]">검색 중…</p>}
       {error && (
-        <p role="alert" className="mt-2 text-sm text-red-600">
+        <p role="alert" className="text-sm text-[#B8381F]">
           {error}
         </p>
       )}
       {!loading && !error && searched && results.length === 0 && (
-        <p className="mt-2 text-sm text-gray-500">검색 결과가 없습니다. 다른 키워드로 찾아보세요.</p>
+        <p className="text-sm text-[#4A554F]">검색 결과가 없습니다. 다른 키워드로 찾아보세요.</p>
       )}
 
       {results.length > 0 && (
-        <ul className="mt-2 max-h-64 overflow-y-auto rounded-lg border border-gray-200 bg-white">
+        <ul className="max-h-64 overflow-y-auto rounded-[14px] border-[1.5px] border-[#17201B] bg-white">
           {results.map((r) => (
-            <li key={`${r.name}-${r.lat}-${r.lng}`}>
+            <li key={`${r.name}-${r.lat}-${r.lng}`} className="border-b border-[#E9ECE4] last:border-b-0">
               <button
                 type="button"
                 onClick={() => choose(r)}
-                className="block w-full px-3 py-2 text-left hover:bg-gray-50"
+                className="block min-h-11 w-full px-4 py-2 text-left hover:bg-[#F7F6F2]"
               >
-                <span className="block text-sm font-medium">{r.name}</span>
-                <span className="block text-xs text-gray-500">{r.address}</span>
+                <span className="block text-sm font-bold">{r.name}</span>
+                <span className="block text-xs text-[#4A554F]">{r.address}</span>
               </button>
             </li>
           ))}
         </ul>
       )}
 
+      {registeredLabel && !selected && (
+        <p className="text-sm text-[#4A554F]">현재 등록된 출발지: {registeredLabel}</p>
+      )}
       {selected && (
-        <p className="mt-2 text-sm text-green-700">
-          선택됨: {selected.name}
+        <p className="text-sm text-[#4A554F]">
+          선택됨: <b className="text-[#17201B]">{selected.name}</b>
           {selected.address && selected.address !== selected.name ? ` (${selected.address})` : ""}
         </p>
       )}
+
+      <button
+        type="button"
+        onClick={submit}
+        disabled={disabled || !selected || submitting}
+        className="mt-1 h-14 rounded-[14px] bg-[#17201B] text-[17px] font-bold text-white disabled:bg-[#9AA29D]"
+      >
+        {submitting ? "등록 중…" : done ? "등록 완료!" : registeredLabel ? "출발지 변경하기" : "내 출발지 등록하기"}
+      </button>
     </div>
   );
 }
