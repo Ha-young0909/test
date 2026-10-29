@@ -95,7 +95,7 @@ export interface TravelTime {
 /** 모든 API 에러 응답 형태. */
 export interface ApiError {
   error: string;
-  code?: "ROOM_NOT_FOUND" | "ROOM_FULL" | "NICKNAME_TAKEN" | "INVALID_INPUT" | "FORBIDDEN";
+  code?: "ROOM_NOT_FOUND" | "ROOM_FULL" | "NICKNAME_TAKEN" | "INVALID_INPUT" | "FORBIDDEN" | "RATE_LIMITED";
 }
 
 /** POST /api/rooms */
@@ -150,9 +150,8 @@ export interface PlaceSearchResponse {
 }
 
 /** POST /api/rooms/[id]/midpoint (C) */
-export interface MidpointRequest {
-  hostId: string;
-}
+/** 방장(hostId)이나 방 참여자(participantId + participantToken)가 호출할 수 있다. */
+export type MidpointRequest = { hostId: string } | { participantId: string; participantToken: string };
 export interface MidpointRoute {
   participantId: string;
   route: string;

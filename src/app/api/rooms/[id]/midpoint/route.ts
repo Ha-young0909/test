@@ -5,6 +5,7 @@ import { isUuid } from "@/lib/validate";
 import { computeMidpoint, legKey, type Origin } from "@/lib/midpoint/engine";
 import { findSubwayStations } from "@/lib/midpoint/kakao";
 import { findBusStops, getTransitLeg, type OdsayConfig } from "@/lib/midpoint/odsay";
+import { acquireRoom, releaseRoom } from "@/lib/midpoint/lock";
 import type { CachedLeg } from "@/lib/midpoint/rank";
 import { MIN_PARTICIPANTS, type MidpointResponse, type MidpointStation } from "@/types";
 
@@ -22,22 +23,47 @@ function odsayConfig(): OdsayConfig | null {
 }
 
 /**
- * 방장이 호출하면 참여자 출발지로 후보 역을 다시 계산해 candidates 에 저장하고 순위를 돌려준다.
+ * 방장 또는 방 참여자가 호출하면 참여자 출발지로 후보 역을 다시 계산해 candidates 에 저장하고 순위를 돌려준다.
  * 같은 이름의 역은 행(과 그 표)을 유지한 채 갱신하고, 후보에서 빠진 역만 지운다.
  */
 export async function POST(request: Request, { params }: Ctx) {
   const { id } = await params;
   const body = await readJson(request);
-  if (!isUuid(id) || !body || !isUuid(body.hostId)) {
-    return errorResponse(400, "방장 정보가 올바르지 않습니다.", "INVALID_INPUT");
+  const asHost = body !== null && isUuid(body.hostId);
+  const asParticipant = body !== null && isUuid(body.participantId) && isUuid(body.participantToken);
+  if (!isUuid(id) || !body || (!asHost && !asParticipant)) {
+    return errorResponse(400, "호출자 정보가 올바르지 않습니다.", "INVALID_INPUT");
   }
 
+  let locked = false;
   try {
     const db = getServerSupabase();
     const { data: room, error: roomError } = await db.from("rooms").select("id, host_id").eq("id", id).maybeSingle();
     if (roomError) throw roomError;
     if (!room) return errorResponse(404, "존재하지 않는 방입니다.", "ROOM_NOT_FOUND");
-    if (room.host_id !== body.hostId) return errorResponse(403, "방장만 중간 지점을 찾을 수 있어요.", "FORBIDDEN");
+    if (asHost) {
+      if (room.host_id !== body.hostId) return errorResponse(403, "방장 정보가 올바르지 않습니다.", "FORBIDDEN");
+    } else {
+      const { data: caller, error: callerError } = await db
+        .from("participants")
+        .select("token")
+        .eq("id", body.participantId as string)
+        .eq("room_id", id)
+        .maybeSingle();
+      if (callerError) throw callerError;
+      if (!caller || caller.token !== body.participantToken) {
+        return errorResponse(403, "이 방의 참여자만 중간 지점을 찾을 수 있어요.", "FORBIDDEN");
+      }
+    }
+
+    const wait = acquireRoom(id);
+    if (wait !== null) {
+      return NextResponse.json(
+        { error: "중간 지점을 계산 중이에요. 잠시 후 다시 시도해 주세요.", code: "RATE_LIMITED" },
+        { status: 429, headers: { "Retry-After": String(wait) } },
+      );
+    }
+    locked = true;
 
     const { data: people, error: peopleError } = await db
       .from("participants")
@@ -157,5 +183,7 @@ export async function POST(request: Request, { params }: Ctx) {
     });
   } catch (err) {
     return serverError(err);
+  } finally {
+    if (locked) releaseRoom(id);
   }
 }

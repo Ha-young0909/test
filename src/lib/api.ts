@@ -17,7 +17,7 @@ export async function readJson(request: Request): Promise<Record<string, unknown
 
 /** 서버 설정 누락 등 예기치 못한 오류를 500 으로 정리한다. */
 export function serverError(err: unknown) {
-  const message = err instanceof Error ? err.message : "서버 오류";
+  // 내부 설정·DB 오류 문구가 클라이언트에 새지 않도록 상세는 로그에만 남긴다.
   console.error(err);
-  return errorResponse(500, message);
+  return errorResponse(500, "서버 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.");
 }
