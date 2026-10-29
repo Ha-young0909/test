@@ -110,8 +110,18 @@ export default function RoomView({ roomId }: { roomId: string }) {
   // 표 변경·참여자 입장이 보이도록 주기적으로 재조회한다 (Realtime 은 D 가 투표에 붙인다).
   useEffect(() => {
     refresh();
-    const timer = setInterval(refresh, POLL_MS);
-    return () => clearInterval(timer);
+    // 백그라운드 탭에서는 재조회를 멈추고, 다시 보이면 바로 한 번 조회한다.
+    const timer = setInterval(() => {
+      if (document.visibilityState === "visible") refresh();
+    }, POLL_MS);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") refresh();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, [refresh]);
 
   async function saveOrigin(origin: Origin) {
@@ -213,24 +223,7 @@ export default function RoomView({ roomId }: { roomId: string }) {
         <section className="space-y-5">
           {joined && <OriginSearch onSubmit={saveOrigin} registeredLabel={me?.origin_label} />}
           {mapSection}
-          <section aria-label="참여자" className="space-y-2">
-            <h2 className="font-semibold">
-              참여자 {participants.length}/{MAX_PARTICIPANTS}
-            </h2>
-            <ul className="space-y-1">
-              {participants.map((p) => (
-                <li key={p.id} className="flex items-center gap-2 rounded-lg bg-gray-100 px-3 py-2 dark:bg-gray-800">
-                  <span>{p.nickname}</span>
-                  {p.is_host && <Badge>방장</Badge>}
-                  {p.id === myId && <Badge>나</Badge>}
-                  <span className="ml-auto truncate text-sm text-gray-500">
-                    {p.origin_label ?? "출발지 미입력"}
-                  </span>
-                </li>
-              ))}
-              {participants.length === 0 && <li className="text-sm text-gray-500">아직 아무도 없어요.</li>}
-            </ul>
-          </section>
+          <ParticipantList participants={participants} myId={myId} />
           {candidates.length > 0 && <CandidateList candidates={candidates} />}
           {isHost && (
             <button
@@ -247,29 +240,33 @@ export default function RoomView({ roomId }: { roomId: string }) {
       ) : (
         <section className="space-y-5">
           {mapSection}
-          <section aria-label="참여자" className="space-y-2">
-            <h2 className="font-semibold">
-              참여자 {participants.length}/{MAX_PARTICIPANTS}
-            </h2>
-            <ul className="space-y-1">
-              {participants.map((p) => (
-                <li key={p.id} className="flex items-center gap-2 rounded-lg bg-gray-100 px-3 py-2 dark:bg-gray-800">
-                  <span>{p.nickname}</span>
-                  {p.is_host && <Badge>방장</Badge>}
-                  {p.id === myId && <Badge>나</Badge>}
-                  <span className="ml-auto truncate text-sm text-gray-500">
-                    {p.origin_label ?? "출발지 미입력"}
-                  </span>
-                </li>
-              ))}
-              {participants.length === 0 && <li className="text-sm text-gray-500">아직 아무도 없어요.</li>}
-            </ul>
-          </section>
+          <ParticipantList participants={participants} myId={myId} />
           {/* D: 후보 목록·투표·결과(VotePanel, ResultView)가 여기에 연결된다. */}
           <p className="text-sm text-gray-500">투표 화면은 곧 추가됩니다.</p>
         </section>
       )}
     </main>
+  );
+}
+
+function ParticipantList({ participants, myId }: { participants: Participant[]; myId: string | null }) {
+  return (
+    <section aria-label="참여자" className="space-y-2">
+      <h2 className="font-semibold">
+        참여자 {participants.length}/{MAX_PARTICIPANTS}
+      </h2>
+      <ul className="space-y-1">
+        {participants.map((p) => (
+          <li key={p.id} className="flex items-center gap-2 rounded-lg bg-gray-100 px-3 py-2 dark:bg-gray-800">
+            <span>{p.nickname}</span>
+            {p.is_host && <Badge>방장</Badge>}
+            {p.id === myId && <Badge>나</Badge>}
+            <span className="ml-auto truncate text-sm text-gray-500">{p.origin_label ?? "출발지 미입력"}</span>
+          </li>
+        ))}
+        {participants.length === 0 && <li className="text-sm text-gray-500">아직 아무도 없어요.</li>}
+      </ul>
+    </section>
   );
 }
 
