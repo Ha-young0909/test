@@ -5,7 +5,7 @@ export const MAX_PARTICIPANTS = 6;
 export const NICKNAME_MAX_LENGTH = 12;
 export const GROUP_NAME_MAX_LENGTH = 20;
 
-export type RoomStatus = "collecting" | "voting";
+export type RoomStatus = "collecting" | "voting" | "closed";
 /** 후보 역 종류: 지하철역 또는 버스 정류장. */
 export type StationKind = "subway" | "bus";
 export type PlaceCategory = "restaurant" | "cafe" | "bar";
@@ -15,6 +15,7 @@ export interface Room {
   name: string | null;
   category: PlaceCategory | null;
   status: RoomStatus;
+  vote_deadline: string | null;
   created_at: string;
 }
 
@@ -140,6 +141,10 @@ export interface MidpointStation {
 export interface MidpointResponse {
   stations: MidpointStation[];
   approximate: boolean;
+  /** 이전 계산의 1순위와 이번 1순위가 다르면 true ("1순위가 △△으로 바뀌었어요" 안내용). */
+  topChanged: boolean;
+  /** 이전 계산의 1순위 역 이름. 처음 계산이면 null. */
+  previousTop: string | null;
 }
 
 /** POST /api/rooms/[id]/places (D) */
@@ -156,7 +161,21 @@ export interface PlacesResponse {
 export interface VoteRequest {
   participantId: string;
   candidateId: string;
+  /** true 면 투표, false 면 내 표 취소. 마감 후에는 서버가 거부한다. */
+  on: boolean;
 }
 export interface VoteResponse {
   ok: true;
+}
+
+/** POST /api/rooms/[id]/deadline (D, 방장만) — minutes·closeNow·reopen 중 하나를 보낸다. */
+export interface DeadlineRequest {
+  hostId: string;
+  minutes?: 30 | 60 | 180 | 1440;
+  closeNow?: boolean;
+  reopen?: boolean;
+}
+export interface DeadlineResponse {
+  voteDeadline: string | null;
+  status: RoomStatus;
 }

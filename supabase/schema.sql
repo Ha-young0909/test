@@ -14,7 +14,8 @@ create table if not exists rooms (
   host_id uuid not null default gen_random_uuid(), -- 방장 토큰. anon 에게 노출 금지
   name text check (char_length(name) between 1 and 20), -- 방장이 정하는 모임 이름
   category text check (category in ('restaurant', 'cafe', 'bar')),
-  status text not null default 'collecting' check (status in ('collecting', 'voting')),
+  status text not null default 'collecting' check (status in ('collecting', 'voting', 'closed')),
+  vote_deadline timestamptz,           -- 투표 마감 시각. 마감 여부는 서버가 이 값으로 판단
   created_at timestamptz not null default now()
 );
 
@@ -65,6 +66,8 @@ create table if not exists candidates (
   created_at timestamptz not null default now()
 );
 create index if not exists candidates_room_idx on candidates(room_id, kind);
+-- 중간 지점을 다시 계산해도 같은 역은 같은 행(과 그 표)을 유지하도록 upsert 키로 쓴다.
+create unique index if not exists candidates_room_station_uniq on candidates(room_id, kind, name);
 
 -- 이동 시간 캐시 (참여자 × 후보역). 출발지가 바뀌면 서버가 해당 참여자 행을 지운다.
 create table if not exists travel_times (
@@ -80,12 +83,13 @@ create table if not exists travel_times (
   unique (participant_id, station_name)
 );
 
--- 투표: 참여자당 한 행. 같은 행을 덮어써서 표를 바꾼다 (upsert on participant_id).
+-- 투표: 참여자 × 후보 역 한 행씩. 투표는 행 삽입, 취소는 행 삭제 (여러 역에 중복 투표 가능).
 create table if not exists votes (
-  participant_id uuid primary key references participants(id) on delete cascade,
+  participant_id uuid not null references participants(id) on delete cascade,
   room_id uuid not null references rooms(id) on delete cascade,
   candidate_id uuid not null references candidates(id) on delete cascade,
-  updated_at timestamptz not null default now()
+  updated_at timestamptz not null default now(),
+  primary key (participant_id, candidate_id)
 );
 create index if not exists votes_room_idx on votes(room_id);
 
@@ -107,7 +111,7 @@ create policy "anon read votes" on votes for select to anon using (true);
 
 -- 방장 토큰 컬럼은 anon 이 읽지 못하게 컬럼 단위로 권한을 준다.
 revoke all on rooms from anon, authenticated;
-grant select (id, name, category, status, created_at) on rooms to anon;
+grant select (id, name, category, status, vote_deadline, created_at) on rooms to anon;
 
 -- 투표 실시간 반영(Supabase Realtime)을 쓰려면 아래를 켠다.
 alter publication supabase_realtime add table votes;

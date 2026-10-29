@@ -1,5 +1,5 @@
 import { centroid, distanceM, estimateTransitMinutes, type LatLng } from "./geo";
-import { rankStations, summarize, type Leg, type StationResult, type StationSeed } from "./rank";
+import { rankStations, summarize, type CachedLeg, type Leg, type StationResult, type StationSeed } from "./rank";
 
 export const APPROXIMATE_NAME = "대략적인 중간 지점";
 
@@ -7,6 +7,7 @@ const SEARCH_RADII_M = [1500, 3000, 6000];
 const MAX_CANDIDATES = 8;
 const MAX_SUBWAY = 5;
 const CONCURRENCY = 6;
+const CACHE_MATCH_M = 50;
 
 export interface Origin extends LatLng {
   participantId: string;
@@ -104,7 +105,7 @@ function approximate(origins: Origin[], center: LatLng, seeds: StationSeed[]): E
  * 중간 지점 계산. 참여자 평균 좌표 주변 후보 역을 찾고, 후보마다 모든 참여자의 이동 시간을 구해 순위를 매긴다.
  * cache 에 있는 구간은 다시 조회하지 않는다. API 실패·후보 없음은 평균 좌표 폴백(approximate)으로 돌려준다.
  */
-export async function computeMidpoint(origins: Origin[], deps: EngineDeps, cache: Map<string, Leg>): Promise<EngineResult> {
+export async function computeMidpoint(origins: Origin[], deps: EngineDeps, cache: Map<string, CachedLeg>): Promise<EngineResult> {
   const center = centroid(origins);
   const seeds = await searchSeeds(center, deps);
   if (seeds.length === 0) return approximate(origins, center, seeds);
@@ -115,7 +116,7 @@ export async function computeMidpoint(origins: Origin[], deps: EngineDeps, cache
   try {
     results = await mapLimit(pairs, CONCURRENCY, async ({ seed, origin }) => {
       const cached = cache.get(legKey(origin.participantId, seed.name));
-      if (cached) return cached;
+      if (cached && distanceM(cached, seed) < CACHE_MATCH_M) return cached;
       const leg = await deps.travel(origin, seed);
       if (leg) fresh.push({ participantId: origin.participantId, station: seed, leg });
       return leg;

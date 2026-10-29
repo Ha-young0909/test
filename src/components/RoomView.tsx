@@ -37,7 +37,7 @@ export default function RoomView({ roomId }: { roomId: string }) {
     try {
       const db = getBrowserSupabase();
       const [roomRes, partRes] = await Promise.all([
-        db.from("rooms").select("id, name, category, status, created_at").eq("id", roomId).maybeSingle(),
+        db.from("rooms").select("id, name, category, status, vote_deadline, created_at").eq("id", roomId).maybeSingle(),
         db.from("participants").select("*").eq("room_id", roomId).order("created_at"),
       ]);
       if (roomRes.error) throw roomRes.error;
