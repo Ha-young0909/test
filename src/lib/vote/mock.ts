@@ -23,9 +23,9 @@ export const MOCK_STATIONS: StationCardData[] = [
     maxMinutes: 33,
     over90: false,
     routes: [
-      { participantId: MOCK_ME, route: "2호선", minutes: 24 },
-      { participantId: "p-2", route: "3호선", minutes: 33 },
-      { participantId: "p-3", route: "5호선 → 2호선", minutes: 25 },
+      { participantId: MOCK_ME, route: "직선거리 추정", minutes: 24 },
+      { participantId: "p-2", route: "직선거리 추정", minutes: 33 },
+      { participantId: "p-3", route: "직선거리 추정", minutes: 25 },
     ],
     restaurants: [
       { name: "을지 노가리골목 호프", type: "술집", rating: 4.4, walkMinutes: 3 },
@@ -48,9 +48,9 @@ export const MOCK_STATIONS: StationCardData[] = [
     maxMinutes: 35,
     over90: false,
     routes: [
-      { participantId: MOCK_ME, route: "1호선", minutes: 22 },
-      { participantId: "p-2", route: "3호선", minutes: 35 },
-      { participantId: "p-3", route: "5호선", minutes: 27 },
+      { participantId: MOCK_ME, route: "직선거리 추정", minutes: 22 },
+      { participantId: "p-2", route: "직선거리 추정", minutes: 35 },
+      { participantId: "p-3", route: "직선거리 추정", minutes: 27 },
     ],
     restaurants: [
       { name: "익선동 한옥 파스타", type: "양식", rating: 4.5, walkMinutes: 4 },
@@ -73,9 +73,9 @@ export const MOCK_STATIONS: StationCardData[] = [
     maxMinutes: 38,
     over90: false,
     routes: [
-      { participantId: MOCK_ME, route: "472번", minutes: 28 },
-      { participantId: "p-2", route: "N13번", minutes: 38 },
-      { participantId: "p-3", route: "472번", minutes: 24 },
+      { participantId: MOCK_ME, route: "직선거리 추정", minutes: 28 },
+      { participantId: "p-2", route: "직선거리 추정", minutes: 38 },
+      { participantId: "p-3", route: "직선거리 추정", minutes: 24 },
     ],
     restaurants: [
       { name: "명동 칼국수 (가상)", type: "한식", rating: 4.5, walkMinutes: 5 },
@@ -98,9 +98,9 @@ export const MOCK_STATIONS: StationCardData[] = [
     maxMinutes: 41,
     over90: false,
     routes: [
-      { participantId: MOCK_ME, route: "2호선", minutes: 29 },
-      { participantId: "p-2", route: "4호선", minutes: 41 },
-      { participantId: "p-3", route: "5호선", minutes: 23 },
+      { participantId: MOCK_ME, route: "직선거리 추정", minutes: 29 },
+      { participantId: "p-2", route: "직선거리 추정", minutes: 41 },
+      { participantId: "p-3", route: "직선거리 추정", minutes: 23 },
     ],
     restaurants: [
       { name: "동대문 닭한마리 (가상)", type: "한식", rating: 4.3, walkMinutes: 6 },
@@ -123,9 +123,9 @@ export const MOCK_STATIONS: StationCardData[] = [
     maxMinutes: 94,
     over90: true,
     routes: [
-      { participantId: MOCK_ME, route: "02번", minutes: 36 },
-      { participantId: "p-2", route: "N13번 → 05번", minutes: 94 },
-      { participantId: "p-3", route: "02번", minutes: 33 },
+      { participantId: MOCK_ME, route: "직선거리 추정", minutes: 36 },
+      { participantId: "p-2", route: "직선거리 추정", minutes: 94 },
+      { participantId: "p-3", route: "직선거리 추정", minutes: 33 },
     ],
     restaurants: [
       { name: "남산 왕돈까스 (가상)", type: "경양식", rating: 4.2, walkMinutes: 7 },

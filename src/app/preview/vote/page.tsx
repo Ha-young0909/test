@@ -12,7 +12,6 @@ export default function VotePreviewPage() {
   const [votes, setVotes] = useState(MOCK_VOTES);
   const [me, setMe] = useState(MOCK_ME);
   const [closed, setClosed] = useState(false);
-  const [approximate, setApproximate] = useState(false);
 
   return (
     <main className="mx-auto flex w-full max-w-xl flex-col gap-5 bg-white px-4 py-8 text-[#17201B]">
@@ -40,10 +39,6 @@ export default function VotePreviewPage() {
           <input type="checkbox" checked={closed} onChange={(e) => setClosed(e.target.checked)} />
           마감
         </label>
-        <label className="flex items-center gap-1.5">
-          <input type="checkbox" checked={approximate} onChange={(e) => setApproximate(e.target.checked)} />
-          대략
-        </label>
       </fieldset>
 
       <VotePanel
@@ -51,7 +46,6 @@ export default function VotePreviewPage() {
         votes={votes}
         myParticipantId={me}
         closed={closed}
-        approximate={approximate}
         onToggleVote={(candidateId) => setVotes((prev) => toggleVote(prev, me, candidateId))}
       />
     </main>

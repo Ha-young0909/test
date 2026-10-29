@@ -13,9 +13,10 @@ interface VotePanelProps {
   onToggleVote: (candidateId: string) => void;
   /** 마감되면 true. 투표 버튼이 모두 막힌다. */
   closed?: boolean;
-  /** 대략적인 중간 지점(폴백)일 때 안내를 띄운다. */
-  approximate?: boolean;
 }
+
+/** 직선거리 계산에서는 노선 정보가 없어 이 문구가 들어온다. 노선처럼 보여주지 않는다. */
+const ESTIMATE_ROUTE = "직선거리 추정";
 
 const TABS: { key: StationTab; label: string }[] = [
   { key: "all", label: "전체" },
@@ -29,7 +30,6 @@ export default function VotePanel({
   myParticipantId,
   onToggleVote,
   closed = false,
-  approximate = false,
 }: VotePanelProps) {
   const [tab, setTab] = useState<StationTab>("all");
   const tabCounts = countByTab(stations);
@@ -46,11 +46,9 @@ export default function VotePanel({
         </span>
       </div>
 
-      {approximate && (
-        <p role="note" className="rounded-[14px] bg-[#FFF4E5] px-4 py-3 text-sm text-[#7A4B00]">
-          이동 시간을 불러오지 못해 <b>대략적인 중간 지점</b>을 보여주고 있어요.
-        </p>
-      )}
+      <p role="note" className="rounded-[14px] bg-[#FFF4E5] px-4 py-3 text-sm text-[#7A4B00]">
+        이동 시간은 <b>직선거리로 계산한 예상값</b>이에요. 실제 대중교통 시간과 다를 수 있어요.
+      </p>
 
       <div role="tablist" aria-label="역 종류" className="flex gap-2">
         {TABS.map((t) => {
@@ -145,12 +143,12 @@ function StationCard({
 
       <dl className="mt-3 grid grid-cols-2 gap-2 rounded-[12px] bg-[#F7F6F2] p-3 text-sm">
         <div className="min-w-0">
-          <dt className="text-xs text-[#6B7570]">내 경로</dt>
+          <dt className="text-xs text-[#6B7570]">내 이동 (예상)</dt>
           <dd className="font-bold">
             {mine ? (
               <>
-                <span className="block truncate">{mine.route}</span>
-                <span className="text-[#E8553D]">{mine.minutes}분</span>
+                {mine.route && mine.route !== ESTIMATE_ROUTE && <span className="block truncate">{mine.route}</span>}
+                <span className="text-[#E8553D]">약 {mine.minutes}분</span>
               </>
             ) : (
               <span className="font-normal text-[#6B7570]">출발지를 입력하면 보여요</span>
@@ -158,14 +156,14 @@ function StationCard({
           </dd>
         </div>
         <div>
-          <dt className="text-xs text-[#6B7570]">모두의 평균</dt>
-          <dd className="font-bold">{station.avgMinutes}분</dd>
+          <dt className="text-xs text-[#6B7570]">모두의 평균 (예상)</dt>
+          <dd className="font-bold">약 {station.avgMinutes}분</dd>
         </div>
       </dl>
 
       {station.over90 && (
         <p role="note" className="mt-2 text-xs font-bold text-[#B8381F]">
-          ⚠ 90분 넘게 걸리는 친구가 있어요
+          ⚠ 90분 넘게 걸릴 것 같은 친구가 있어요
         </p>
       )}
 

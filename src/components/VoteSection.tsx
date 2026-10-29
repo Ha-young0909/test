@@ -135,7 +135,6 @@ export default function VoteSection({ roomId }: { roomId: string }) {
         myParticipantId={me.token ? me.id : null}
         onToggleVote={onToggleVote}
         closed={state.closed}
-        approximate={state.approximate}
       />
       <ResultView stations={state.stations} votes={state.votes} closed={state.closed} />
     </div>
