@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { getHostId, saveParticipantId } from "@/lib/session";
+import { getHostId, saveParticipantId, saveParticipantToken } from "@/lib/session";
 import { normalizeNickname } from "@/lib/validate";
 import { NICKNAME_MAX_LENGTH, type ApiError, type JoinRoomResponse } from "@/types";
 
@@ -35,6 +35,7 @@ export default function JoinForm({ roomId, onJoined }: Props) {
         throw new Error("error" in data ? data.error : "참여하지 못했습니다.");
       }
       saveParticipantId(roomId, data.participantId);
+      saveParticipantToken(roomId, data.participantToken);
       onJoined(data.participantId);
     } catch (err) {
       setError(err instanceof Error ? err.message : "참여하지 못했습니다.");

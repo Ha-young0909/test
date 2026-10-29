@@ -40,7 +40,7 @@ export async function POST(request: Request, { params }: Ctx) {
         origin_lat: hasOrigin ? body.lat : null,
         origin_lng: hasOrigin ? body.lng : null,
       })
-      .select("id")
+      .select("id, token")
       .single();
 
     if (error) {
@@ -52,7 +52,7 @@ export async function POST(request: Request, { params }: Ctx) {
       }
       throw error;
     }
-    return NextResponse.json<JoinRoomResponse>({ participantId: data.id }, { status: 201 });
+    return NextResponse.json<JoinRoomResponse>({ participantId: data.id, participantToken: data.token }, { status: 201 });
   } catch (err) {
     return serverError(err);
   }
@@ -66,6 +66,7 @@ export async function PATCH(request: Request, { params }: Ctx) {
     !isUuid(id) ||
     !body ||
     !isUuid(body.participantId) ||
+    !isUuid(body.participantToken) ||
     !isValidCoord(body.lat, body.lng) ||
     typeof body.label !== "string"
   ) {
@@ -78,11 +79,12 @@ export async function PATCH(request: Request, { params }: Ctx) {
       .from("participants")
       .update({ origin_lat: body.lat, origin_lng: body.lng, origin_label: body.label })
       .eq("id", body.participantId)
+      .eq("token", body.participantToken)
       .eq("room_id", id)
       .select("id");
     if (error) throw error;
     if (data.length === 0) {
-      return errorResponse(404, "참여자를 찾을 수 없습니다.", "FORBIDDEN");
+      return errorResponse(403, "본인 확인에 실패했습니다.", "FORBIDDEN");
     }
     const { error: cacheError } = await db
       .from("travel_times")

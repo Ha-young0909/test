@@ -5,7 +5,7 @@ export const MAX_PARTICIPANTS = 6;
 export const NICKNAME_MAX_LENGTH = 12;
 export const GROUP_NAME_MAX_LENGTH = 20;
 
-export type RoomStatus = "collecting" | "voting";
+export type RoomStatus = "collecting" | "voting" | "closed";
 /** 후보 역 종류: 지하철역 또는 버스 정류장. */
 export type StationKind = "subway" | "bus";
 export type PlaceCategory = "restaurant" | "cafe" | "bar";
@@ -15,6 +15,7 @@ export interface Room {
   name: string | null;
   category: PlaceCategory | null;
   status: RoomStatus;
+  vote_deadline: string | null;
   created_at: string;
 }
 
@@ -29,6 +30,30 @@ export interface Participant {
   created_at: string;
 }
 
+/** 역 근처 맛집·갈만한 곳 한 항목 (candidates.restaurants / spots 의 원소). */
+export interface NearbyPlace {
+  name: string;
+  /** 종류 (예: 한식, 카페, 공원). */
+  category: string;
+  /** 별점. 출처가 정해지기 전이나 정보가 없으면 null. */
+  rating: number | null;
+  walkMinutes: number;
+}
+
+/** 역 근처 맛집. 카카오 로컬 API는 별점이 없어 출처가 정해질 때까지 rating 은 null 일 수 있다. */
+export interface DiningPlace {
+  name: string;
+  category: string;
+  rating: number | null;
+  walkMinutes: number;
+}
+/** 역 근처 갈만한 곳(카페·공원·쇼핑·전시 등). */
+export interface NearbyPlace {
+  name: string;
+  category: string;
+  walkMinutes: number;
+}
+
 export interface Candidate {
   id: string;
   room_id: string;
@@ -39,10 +64,14 @@ export interface Candidate {
   lat: number;
   lng: number;
   lines: string[];
+  dining: DiningPlace[];
+  nearby: NearbyPlace[];
   max_minutes: number | null;
   avg_minutes: number | null;
   over90: boolean;
   approximate: boolean;
+  restaurants: NearbyPlace[];
+  spots: NearbyPlace[];
 }
 
 export interface Vote {
@@ -89,11 +118,14 @@ export interface JoinRoomRequest {
 }
 export interface JoinRoomResponse {
   participantId: string;
+  /** 이후 쓰기 요청에서 본인임을 증명하는 비밀 토큰. 브라우저에만 저장한다. */
+  participantToken: string;
 }
 
 /** PATCH /api/rooms/[id]/participants — 출발지 저장·변경 (B 가 사용). */
 export interface UpdateOriginRequest {
   participantId: string;
+  participantToken: string;
   lat: number;
   lng: number;
   label: string;
@@ -147,10 +179,9 @@ export interface MidpointResponse {
 }
 
 /** POST /api/rooms/[id]/places (D) */
+/** 방의 모든 후보 역에 맛집·갈만한 곳을 한 번에 채운다. */
 export interface PlacesRequest {
   hostId: string;
-  category: PlaceCategory;
-  stationName: string;
 }
 export interface PlacesResponse {
   candidates: Candidate[];
@@ -159,8 +190,23 @@ export interface PlacesResponse {
 /** POST /api/rooms/[id]/vote (D) */
 export interface VoteRequest {
   participantId: string;
+  participantToken: string;
   candidateId: string;
+  /** true 면 투표, false 면 내 표 취소. 마감 후에는 서버가 거부한다. */
+  on: boolean;
 }
 export interface VoteResponse {
   ok: true;
+}
+
+/** POST /api/rooms/[id]/deadline (D, 방장만) — minutes·closeNow·reopen 중 하나를 보낸다. */
+export interface DeadlineRequest {
+  hostId: string;
+  minutes?: 30 | 60 | 180 | 1440;
+  closeNow?: boolean;
+  reopen?: boolean;
+}
+export interface DeadlineResponse {
+  voteDeadline: string | null;
+  status: RoomStatus;
 }

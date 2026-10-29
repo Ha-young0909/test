@@ -18,20 +18,31 @@ interface OdsayErrorBody {
   message?: string;
 }
 
+const MAX_RETRIES = 3;
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
 async function call(path: string, params: Record<string, string>, config: OdsayConfig): Promise<Record<string, unknown>> {
   const query = new URLSearchParams({ ...params, apiKey: config.apiKey });
-  let res: Response;
-  try {
-    res = await fetch(`${BASE}/${path}?${query}`, {
-      headers: { Origin: config.origin, Referer: config.origin },
-      cache: "no-store",
-      signal: AbortSignal.timeout(8000),
-    });
-  } catch (err) {
-    throw new OdsayError(`odsay ${path} 요청 실패: ${err instanceof Error ? err.message : err}`);
+  for (let attempt = 0; ; attempt++) {
+    let res: Response;
+    try {
+      res = await fetch(`${BASE}/${path}?${query}`, {
+        headers: { Origin: config.origin, Referer: config.origin },
+        cache: "no-store",
+        signal: AbortSignal.timeout(8000),
+      });
+    } catch (err) {
+      throw new OdsayError(`odsay ${path} 요청 실패: ${err instanceof Error ? err.message : err}`);
+    }
+    // 짧은 시간에 너무 많이 부르면 429 가 오므로 잠시 쉬고 다시 시도한다.
+    if (res.status === 429 && attempt < MAX_RETRIES) {
+      await sleep(400 * (attempt + 1));
+      continue;
+    }
+    if (!res.ok) throw new OdsayError(`odsay ${path} ${res.status}`);
+    return (await res.json()) as Record<string, unknown>;
   }
-  if (!res.ok) throw new OdsayError(`odsay ${path} ${res.status}`);
-  return (await res.json()) as Record<string, unknown>;
 }
 
 /** 오류 본문은 객체이기도 배열이기도 하다. 없으면 null. */

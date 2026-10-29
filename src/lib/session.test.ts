@@ -1,5 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { getHostId, getParticipantId, saveHostId, saveParticipantId } from "./session";
+import {
+  getHostId,
+  getParticipantId,
+  getParticipantToken,
+  saveHostId,
+  saveParticipantId,
+  saveParticipantToken,
+} from "./session";
 
 // node 환경이라 window.localStorage 를 간단히 흉내 낸다.
 function stubStorage(overrides: Partial<Storage> = {}) {
@@ -24,6 +31,9 @@ describe("session (localStorage)", () => {
     expect(getHostId("r1")).toBe("h1");
     expect(getParticipantId("r2")).toBe("p2");
     expect(getHostId("r2")).toBeNull();
+    saveParticipantToken("r1", "t1");
+    expect(getParticipantToken("r1")).toBe("t1");
+    expect(getParticipantToken("r2")).toBeNull();
   });
 
   it("localStorage 가 던져도 예외 없이 null/무시", () => {

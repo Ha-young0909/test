@@ -5,13 +5,15 @@ import { isUuid } from "@/lib/validate";
 import { computeMidpoint, legKey, type Origin } from "@/lib/midpoint/engine";
 import { findSubwayStations } from "@/lib/midpoint/kakao";
 import { findBusStops, getTransitLeg, type OdsayConfig } from "@/lib/midpoint/odsay";
-import type { Leg } from "@/lib/midpoint/rank";
+import type { CachedLeg } from "@/lib/midpoint/rank";
 import { MIN_PARTICIPANTS, type MidpointResponse, type MidpointStation } from "@/types";
 
 type Ctx = { params: Promise<{ id: string }> };
 
+// 후보 8곳 × 참여자 6명의 첫 조회는 수 초가 걸릴 수 있다.
+export const maxDuration = 30;
+
 const DEFAULT_ODSAY_ORIGIN = "http://localhost:3000";
-const COORD_EPSILON = 1e-5;
 
 /** ODsay 키가 없으면 null: 엔진이 평균 좌표 폴백으로 동작한다. */
 function odsayConfig(): OdsayConfig | null {
@@ -59,11 +61,13 @@ export async function POST(request: Request, { params }: Ctx) {
     if (topRes.error) throw topRes.error;
     const previousTop = (topRes.data?.name as string | undefined) ?? null;
 
-    const cache = new Map<string, Leg>();
+    const cache = new Map<string, CachedLeg>();
     for (const row of cachedRes.data ?? []) {
       cache.set(legKey(row.participant_id, row.station_name), {
         minutes: row.minutes,
-        route: row.route ?? "",
+        route: row.route ?? "대중교통",
+        lat: row.station_lat,
+        lng: row.station_lng,
       });
     }
 
@@ -85,8 +89,7 @@ export async function POST(request: Request, { params }: Ctx) {
           return getTransitLeg(from, to, odsay);
         },
       },
-      // 캐시 행의 역 좌표가 지금 후보와 다르면(같은 이름의 다른 정류장) 쓰지 않는다.
-      odsay ? filterCache(cache, cachedRes.data ?? []) : new Map(),
+      cache,
     );
 
     if (result.fresh.length > 0) {
@@ -155,15 +158,4 @@ export async function POST(request: Request, { params }: Ctx) {
   } catch (err) {
     return serverError(err);
   }
-}
-
-type CacheRow = { participant_id: string; station_name: string; station_lat: number; station_lng: number };
-
-/** 좌표가 어긋난 캐시 행을 걸러낸다 (이름이 같은 다른 정류장 대비). */
-function filterCache(cache: Map<string, Leg>, rows: CacheRow[]): Map<string, Leg> {
-  const stale = rows.filter(
-    (r) => !cache.get(legKey(r.participant_id, r.station_name))?.route && false,
-  );
-  void stale;
-  return cache;
 }

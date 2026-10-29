@@ -1,0 +1,109 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const ROOM = "00000000-0000-4000-8000-000000000001";
+const HOST = "00000000-0000-4000-8000-0000000000aa";
+const P1 = "00000000-0000-4000-8000-0000000000b1";
+const P2 = "00000000-0000-4000-8000-0000000000b2";
+
+const tables = {
+  room: vi.fn(),
+  participants: vi.fn(),
+  travelTimes: vi.fn(),
+  top: vi.fn(),
+  stored: vi.fn(),
+};
+const upsertCandidates = vi.fn();
+const upsertTimes = vi.fn();
+const deleteIn = vi.fn();
+
+vi.mock("@/lib/supabase/server", () => ({
+  getServerSupabase: () => ({
+    from: (table: string) => {
+      if (table === "rooms") return { select: () => ({ eq: () => ({ maybeSingle: tables.room }) }) };
+      if (table === "participants") return { select: () => ({ eq: tables.participants }) };
+      if (table === "travel_times") return { select: () => ({ eq: tables.travelTimes }), upsert: upsertTimes };
+      return {
+        select: (cols: string) =>
+          cols === "name"
+            ? { eq: () => ({ eq: () => ({ maybeSingle: tables.top }) }) }
+            : { eq: tables.stored },
+        upsert: upsertCandidates,
+        delete: () => ({ in: deleteIn }),
+      };
+    },
+  }),
+}));
+
+import { POST } from "./route";
+
+const ctx = (id = ROOM) => ({ params: Promise.resolve({ id }) });
+const req = (body: unknown) => new Request("http://test", { method: "POST", body: JSON.stringify(body) });
+
+beforeEach(() => {
+  for (const fn of [...Object.values(tables), upsertCandidates, upsertTimes, deleteIn]) fn.mockReset();
+  tables.room.mockResolvedValue({ data: { id: ROOM, host_id: HOST }, error: null });
+  tables.participants.mockResolvedValue({
+    data: [
+      { id: P1, origin_lat: 37.5, origin_lng: 126.9 },
+      { id: P2, origin_lat: 37.5, origin_lng: 127.1 },
+    ],
+    error: null,
+  });
+  tables.travelTimes.mockResolvedValue({ data: [], error: null });
+  tables.top.mockResolvedValue({ data: { name: "이전역" }, error: null });
+  tables.stored.mockResolvedValue({ data: [{ id: "old", kind: "subway", name: "이전역" }], error: null });
+  upsertCandidates.mockResolvedValue({ error: null });
+  upsertTimes.mockResolvedValue({ error: null });
+  deleteIn.mockResolvedValue({ error: null });
+  vi.stubEnv("KAKAO_REST_API_KEY", "");
+  vi.stubEnv("ODSAY_API_KEY", "");
+  vi.spyOn(console, "error").mockImplementation(() => {});
+});
+
+describe("POST /api/rooms/[id]/midpoint", () => {
+  it("방장 토큰이 없거나 형식이 틀리면 400", async () => {
+    expect((await POST(req({}), ctx())).status).toBe(400);
+    expect((await POST(req({ hostId: "x" }), ctx())).status).toBe(400);
+  });
+
+  it("방이 없으면 404, 방장이 아니면 403", async () => {
+    tables.room.mockResolvedValueOnce({ data: null, error: null });
+    expect((await POST(req({ hostId: HOST }), ctx())).status).toBe(404);
+    const res = await POST(req({ hostId: "00000000-0000-4000-8000-0000000000cc" }), ctx());
+    expect(res.status).toBe(403);
+    expect(upsertCandidates).not.toHaveBeenCalled();
+  });
+
+  it("출발지를 입력한 참여자가 2명 미만이면 400", async () => {
+    tables.participants.mockResolvedValue({ data: [{ id: P1, origin_lat: 37.5, origin_lng: 127 }, { id: P2, origin_lat: null, origin_lng: null }], error: null });
+    const res = await POST(req({ hostId: HOST }), ctx());
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe("INVALID_INPUT");
+  });
+
+  it("키가 없으면 평균 좌표 폴백으로 후보를 저장하고 approximate 를 알린다", async () => {
+    const res = await POST(req({ hostId: HOST }), ctx());
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.approximate).toBe(true);
+    expect(body.stations).toHaveLength(1);
+    expect(body.stations[0]).toMatchObject({ name: "대략적인 중간 지점", lat: 37.5, lng: 127 });
+    expect(body.previousTop).toBe("이전역");
+    expect(body.topChanged).toBe(true);
+    expect(upsertTimes).not.toHaveBeenCalled(); // 추정값은 캐시하지 않는다
+    expect(upsertCandidates).toHaveBeenCalledWith(
+      [expect.objectContaining({ room_id: ROOM, number: 1, approximate: true, kind: "subway" })],
+      { onConflict: "room_id,kind,name" },
+    );
+    expect(deleteIn).toHaveBeenCalledWith("id", ["old"]); // 후보에서 빠진 이전 1순위만 지운다
+  });
+
+  it("처음 계산이면 topChanged 가 false", async () => {
+    tables.top.mockResolvedValue({ data: null, error: null });
+    tables.stored.mockResolvedValue({ data: [], error: null });
+    const body = await (await POST(req({ hostId: HOST }), ctx())).json();
+    expect(body.topChanged).toBe(false);
+    expect(body.previousTop).toBeNull();
+    expect(deleteIn).not.toHaveBeenCalled();
+  });
+});
